@@ -1,10 +1,87 @@
 # xike.xikeos Ansible Collection
 
+[![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)](https://github.com/andy/xike-xikeos)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
+[![Ansible](https://img.shields.io/badge/Ansible-%3E%3D2.15-red.svg)](https://www.ansible.com/)
+[![Python](https://img.shields.io/badge/Python-%3E%3D3.10-blue.svg)](https://www.python.org/)
+
 Ansible Collection for managing **Xike (兮克) switches** with Cisco IOS-like CLI.
 
 ## Overview
 
-This collection provides modules, connection plugins, and utilities for automating Xike Ethernet switches. Xike switches use a Cisco IOS-like CLI interface, making this collection compatible with many existing Ansible network automation patterns.
+The `xike.xikeos` collection provides a complete set of Ansible modules for automating **Xike (兮克) Ethernet switches**. Xike switches use a Cisco IOS-like command-line interface, making this collection familiar to anyone with IOS experience while providing full support for Xike-specific features.
+
+### Who is this for?
+
+- **Network engineers** managing Xike switch infrastructure who want consistent, repeatable automation
+- **DevOps/Platform teams** building CI/CD pipelines for network configuration
+- **Anyone** migrating from or coexisting with Cisco IOS environments
+
+### Key Features
+
+- **17 modules** covering L2, L3, routing, security, and Xike-specific features
+- **Hybrid port mode** — a Xike-specific feature for flexible VLAN tagging
+- **ERPS/EAPS** ring protection for carrier-grade Ethernet
+- **QinQ tunneling** for service provider deployments
+- **Idempotent resource modules** with `merged`, `replaced`, and `deleted` states
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        Your Playbook                            │
+│   tasks:                                                        │
+│     - xike.xikeos.xikeos_vlans:                                  │
+│         config: ...                                             │
+└───────────────────────────┬─────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                   xike.xikeos Modules                           │
+│                                                                 │
+│  xikeos_vlans          xikeos_stp           xikeos_erps         │
+│  xikeos_interfaces     xikeos_mirror        xikeos_eaps         │
+│  xikeos_l2_interfaces  xikeos_port_isolate  xikeos_qinq         │
+│  xikeos_l3_interfaces  xikeos_acls          xikeos_flex_monitor │
+│  xikeos_lag_interfaces xikeos_static_routes xikeos_config       │
+│  xikeos_ospfv2         xikeos_command                           │
+└───────────────────────────┬─────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              Module Utils (rm_templates / facts)                │
+│  facts/vlans.py    facts/ospfv2.py    facts/eaps.py             │
+│  facts/interfaces.py  facts/stp.py    facts/erps.py             │
+│  facts/l2_interfaces.py  ...         facts/qinq.py              │
+└───────────────────────────┬─────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                  Connection Plugin (SSH)                        │
+│              Uses Netmiko with device_type: raisecom             │
+└───────────────────────────┬─────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                       Xike Switch                               │
+│                  (IOS-like CLI via SSH)                         │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## Tech Stack
+
+| Component | Requirement | Notes |
+|-----------|-------------|-------|
+| **Ansible** | >= 2.15 | Core automation engine |
+| **Netmiko** | >= 4.7.0 | Uses `device_type: raisecom` for SSH communication |
+| **Python** | >= 3.10 | Runtime dependency |
+
+### Dependencies
+
+```bash
+# Install Python dependencies
+pip install "ansible>=2.15" "netmiko>=4.7.0"
+```
 
 ## Installation
 
@@ -23,69 +100,804 @@ ansible-galaxy collection build
 ansible-galaxy collection install xike-xikeos-0.1.0.tar.gz
 ```
 
-### From local development directory
+### From Local Development Directory
 
 ```bash
+# Install directly from local clone
 ansible-galaxy collection install /path/to/xike-xikeos/
+
+# Or symlink for development
+ln -s /path/to/xike-xikeos ~/.ansible/collections/ansible_collections/xike/xikeos
 ```
 
-## Requirements
+### Development Setup
 
-- Ansible >= 2.9
-- Python >= 3.6
+```bash
+git clone https://github.com/andy/xike-xikeos.git
+cd xike-xikeos
 
-## Usage
+# Create virtual environment
+python3 -m venv venv
+source venv/bin/activate
 
-### Inventory Example
+# Install dependencies
+pip install -r requirements.txt  # or:
+pip install "ansible>=2.15" "netmiko>=4.7.0" pytest ansible-lint
+
+# Run tests
+pytest tests/
+```
+
+## Quick Start
+
+### 1. Create an Inventory
 
 ```yaml
+# inventory.yml
 all:
   children:
     xike_switches:
       hosts:
-        switch01:
+        core-sw01:
           ansible_host: 192.168.1.100
-          ansible_network_os: xike.xikeos
           ansible_user: admin
-          ansible_password: secret
-          ansible_connection: httpapi
+          ansible_password: "{{ vault_switch_password }}"
+          ansible_network_os: xike.xikeos
+          ansible_connection: netconf  # or httpapi/ssh
 ```
 
-### Playbook Example
+### 2. Create VLANs
 
 ```yaml
+# create_vlans.yml
 ---
-- name: Configure Xike Switch
+- name: Configure Xike Switch VLANs
   hosts: xike_switches
   gather_facts: no
   tasks:
-    - name: Get switch facts
-      xike.xikeos.xikeos_facts:
-        gather_subset:
-          - interfaces
-          - vlans
-
-    - name: Display interface information
-      ansible.builtin.debug:
-        var: ansible_facts.net_interfaces
+    - name: Create VLANs
+      xike.xikeos.xikeos_vlans:
+        config:
+          - vlan_id: 100
+            name: DATA
+            state: active
+          - vlan_id: 200
+            name: VOICE
+            state: active
+        state: merged
 ```
 
-## Modules
+### 3. Run It
 
-| Module | Description |
-|--------|-------------|
-| `xikeos_facts` | Gather facts from Xike switches |
-| `xikeos_config` | Manage device configuration |
-| `xikeos_command` | Run commands on Xike switches |
+```bash
+ansible-playbook -i inventory.yml create_vlans.yml
+```
 
-## Connection Plugin
+## Inventory Setup
 
-The collection includes a connection plugin for Xike switches that communicates via SSH with the IOS-like CLI.
+```yaml
+# inventory.yml — Full example with all required variables
+all:
+  children:
+    xike_switches:
+      hosts:
+        core-sw01:
+          ansible_host: 192.168.1.100        # Management IP
+          ansible_port: 22                     # SSH port (default: 22)
+          ansible_user: admin                  # Login username
+          ansible_password: secret             # Login password (use vault!)
+          ansible_network_os: xike.xikeos     # Collection FQCN
+          ansible_connection: netconf          # Connection type
+          ansible_become: yes                  # Enable privilege escalation
+          ansible_become_method: enable        # Enable mode method
+          ansible_become_password: secret      # Enable password
 
-## Contributing
+        access-sw01:
+          ansible_host: 192.168.1.101
+          ansible_user: admin
+          ansible_password: "{{ vault_access_sw_password }}"
+          ansible_network_os: xike.xikeos
+          ansible_connection: netconf
 
-Contributions are welcome! Please open an issue or submit a pull request on [GitHub](https://github.com/andy/xike-xikeos).
+    # Group variables (apply to all switches in group)
+    xike_switches:
+      vars:
+        ansible_network_os: xike.xikeos
+        ansible_connection: netconf
+        ansible_user: admin
+        ansible_become: yes
+        ansible_become_method: enable
+```
+
+## Available Modules
+
+| Module | Description | States |
+|--------|-------------|--------|
+| `xikeos_vlans` | Manage VLANs (create, modify, delete) | `merged`, `replaced`, `deleted` |
+| `xikeos_interfaces` | Configure Ethernet interfaces (speed, duplex, description) | `merged`, `replaced` |
+| `xikeos_l2_interfaces` | Layer 2 interface config: access, trunk, and **hybrid** modes | `merged`, `replaced` |
+| `xikeos_l3_interfaces` | Layer 3 VLAN interface IP addresses (IPv4/IPv6) | `merged`, `replaced` |
+| `xikeos_lag_interfaces` | LAG eth-trunk bundles (static/dynamic LACP) | `merged`, `replaced` |
+| `xikeos_ospfv2` | OSPFv2 routing (networks, redistribution, passive interfaces) | `merged`, `replaced` |
+| `xikeos_static_routes` | Static routes (IPv4/IPv6) | `merged`, `replaced`, `deleted` |
+| `xikeos_acls` | Access Control Lists (Standard 1-999, MAC 1000-1999, Mixed 2000-2999) | `merged`, `replaced`, `deleted` |
+| `xikeos_stp` | Spanning Tree Protocol (STP/RSTP/MSTP/PVST) | `merged`, `replaced` |
+| `xikeos_mirror` | Port mirroring (mirror groups with source/destination) | `present`, `absent` |
+| `xikeos_port_isolate` | Port isolation groups (prevent inter-port communication) | `present`, `absent` |
+| `xikeos_erps` | ERPS G.8032 ring protection | `present`, `absent` |
+| `xikeos_eaps` | EAPS Ethernet Automatic Protection Switching | `present`, `absent` |
+| `xikeos_qinq` | QinQ VLAN stacking (802.1ad) | `present`, `absent` |
+| `xikeos_flex_monitor_link` | Flex-Link and Monitor-Link redundancy | `present`, `absent` |
+| `xikeos_config` | Push raw configuration lines | — |
+| `xikeos_command` | Execute read-only show commands | — |
+
+## Usage Examples
+
+### VLAN Management
+
+```yaml
+# Create VLANs
+- name: Create VLANs
+  xike.xikeos.xikeos_vlans:
+    config:
+      - vlan_id: 100
+        name: DATA
+        state: active
+      - vlan_id: 200
+        name: VOICE
+        state: active
+    state: merged
+
+# Replace all VLAN configuration
+- name: Replace VLANs
+  xike.xikeos.xikeos_vlans:
+    config:
+      - vlan_id: 100
+        name: SALES
+    state: replaced
+
+# Delete VLANs
+- name: Remove VLANs
+  xike.xikeos.xikeos_vlans:
+    config:
+      - vlan_id: 200
+      - vlan_id: 300
+    state: deleted
+```
+
+### Interface Configuration
+
+```yaml
+# Configure interface properties
+- name: Set interface parameters
+  xike.xikeos.xikeos_interfaces:
+    config:
+      - name: ethernet 0/0/1
+        description: Uplink to core
+        speed: 1000
+        duplex: full
+        enabled: true
+        mtu: 1500
+    state: merged
+
+# Shutdown an interface
+- name: Disable interface
+  xike.xikeos.xikeos_interfaces:
+    config:
+      - name: ethernet 0/0/24
+        enabled: false
+    state: merged
+```
+
+### Layer 2 Interfaces (Access / Trunk / Hybrid)
+
+```yaml
+# Access port
+- name: Configure access port
+  xike.xikeos.xikeos_l2_interfaces:
+    config:
+      - name: ethernet 0/0/1
+        mode: access
+        access_vlan: 100
+    state: merged
+
+# Trunk port
+- name: Configure trunk port
+  xike.xikeos.xikeos_l2_interfaces:
+    config:
+      - name: ethernet 0/0/24
+        mode: trunk
+        trunk_allowed_vlan: "10,20,30"
+    state: merged
+
+# Hybrid port (Xike-specific feature)
+- name: Configure hybrid port
+  xike.xikeos.xikeos_l2_interfaces:
+    config:
+      - name: ethernet 0/0/3
+        mode: hybrid
+        pvid: 100
+        hybrid_untagged_vlan: "10,20"
+        hybrid_tagged_vlan: "30,40"
+    state: merged
+```
+
+### Layer 3 VLAN Interfaces
+
+```yaml
+# Configure SVI IP address
+- name: Set VLAN interface IP
+  xike.xikeos.xikeos_l3_interfaces:
+    config:
+      - name: vlan-interface 100
+        ipv4:
+          - address: 192.168.100.1
+            subnet_mask: 255.255.255.0
+    state: merged
+
+# IPv6 on VLAN interface
+- name: Set IPv6 address
+  xike.xikeos.xikeos_l3_interfaces:
+    config:
+      - name: vlan-interface 200
+        ipv6:
+          - address: "2001:db8::1/64"
+    state: merged
+```
+
+### LAG (eth-trunk)
+
+```yaml
+# Create static eth-trunk
+- name: Create static LAG
+  xike.xikeos.xikeos_lag_interfaces:
+    config:
+      - name: eth-trunk 1
+        mode: static
+        members:
+          - "0/0/1"
+          - "0/0/2"
+    state: merged
+
+# Create dynamic eth-trunk with LACP
+- name: Create LACP LAG
+  xike.xikeos.xikeos_lag_interfaces:
+    config:
+      - name: eth-trunk 2
+        mode: dynamic
+        lacp_mode: active
+        members:
+          - "0/0/3"
+          - "0/0/4"
+    state: merged
+```
+
+### OSPF
+
+```yaml
+# Basic OSPF configuration
+- name: Configure OSPF
+  xike.xikeos.xikeos_ospfv2:
+    config:
+      process_id: 1
+      router_id: 1.1.1.1
+      networks:
+        - network: 10.0.0.0
+          wildcard: 0.0.255.255
+          area: "0"
+        - network: 192.168.1.0
+          wildcard: 0.0.0.255
+          area: "1"
+    state: merged
+
+# OSPF with redistribution
+- name: Configure OSPF with redistribution
+  xike.xikeos.xikeos_ospfv2:
+    config:
+      process_id: 1
+      router_id: 1.1.1.1
+      networks:
+        - network: 10.0.0.0
+          wildcard: 0.0.255.255
+          area: "0"
+      redistribute:
+        - protocol: static
+          metric: 10
+        - protocol: connected
+          route_map: REDIST-CONNECTED
+      default_info_originate: true
+      default_info_originate_always: true
+      passive_interfaces:
+        - vlan-interface 10
+        - vlan-interface 20
+    state: merged
+```
+
+### Static Routes
+
+```yaml
+# Add IPv4 static route
+- name: Configure static route
+  xike.xikeos.xikeos_static_routes:
+    config:
+      - destination: 192.168.100.0
+        mask: 255.255.255.0
+        next_hop: 10.0.0.2
+        distance: 1
+        route_type: ipv4
+    state: merged
+
+# Add IPv6 static route
+- name: Configure IPv6 route
+  xike.xikeos.xikeos_static_routes:
+    config:
+      - destination: "2001:db8::"
+        mask: "48"
+        next_hop: "2001:db8::1"
+        route_type: ipv6
+    state: merged
+```
+
+### ACLs
+
+```yaml
+# Standard ACL (1-999)
+- name: Create standard IP ACL
+  xike.xikeos.xikeos_acls:
+    config:
+      - acl_id: 100
+        acl_type: standard
+        remark: Permit internal networks
+        rules:
+          - sequence: 10
+            action: permit
+            source: 192.168.0.0 0.0.255.255
+          - sequence: 20
+            action: deny
+            source: any
+    state: merged
+
+# MAC ACL (1000-1999)
+- name: Create MAC ACL
+  xike.xikeos.xikeos_acls:
+    config:
+      - acl_id: 1001
+        acl_type: mac
+        remark: Filter by MAC address
+        rules:
+          - sequence: 10
+            action: permit
+            source: 0011.2233.4455
+            destination: 0000.0000.0000
+    state: merged
+
+# Mixed/Extended ACL (2000-2999)
+- name: Create mixed ACL
+  xike.xikeos.xikeos_acls:
+    config:
+      - acl_id: 2001
+        acl_type: mixed
+        remark: Web traffic filter
+        rules:
+          - sequence: 10
+            action: permit
+            protocol: tcp
+            source: 192.168.1.0 0.0.0.255
+            destination: any
+    state: merged
+```
+
+### STP
+
+```yaml
+# Configure MSTP
+- name: Set STP mode to MSTP
+  xike.xikeos.xikeos_stp:
+    config:
+      stp_mode: mstp
+      priority: 4096
+      hello_time: 2
+      forward_time: 15
+      max_age: 20
+      mstp:
+        region_name: SWITCH-REGION
+        revision: 1
+        instances:
+          - instance_id: 0
+            priority: 4096
+            vlans: [1, 100]
+          - instance_id: 1
+            priority: 8192
+            vlans: [200, 300]
+    state: merged
+```
+
+### Port Mirroring
+
+```yaml
+# Create mirror group
+- name: Set up port mirroring
+  xike.xikeos.xikeos_mirror:
+    config:
+      group_id: 1
+      source_interfaces:
+        - name: ethernet 0/0/1
+          direction: both
+        - name: ethernet 0/0/2
+          direction: ingress
+      destination_interface: ethernet 0/0/10
+    state: present
+
+# Remove mirror group
+- name: Delete mirror group
+  xike.xikeos.xikeos_mirror:
+    config:
+      group_id: 1
+    state: absent
+```
+
+### ERPS (G.8032 Ring Protection)
+
+```yaml
+# Configure ERPS instance
+- name: Configure ERPS
+  xike.xikeos.xikeos_erps:
+    instance_id: 1
+    control_vlan: 100
+    port0: "ethernet 0/0/1"
+    port1: "ethernet 0/0/2"
+    work_mode: revertive
+    protected_instances: "1,2,5-10"
+    ring_enable: true
+    guard_timer: 500
+    wtr_timer: 5
+    state: present
+```
+
+### EAPS (Ethernet Automatic Protection Switching)
+
+```yaml
+# Configure EAPS domain
+- name: Configure EAPS
+  xike.xikeos.xikeos_eaps:
+    domain_id: 1
+    control_vlan: 100
+    rings:
+      - ring_id: 1
+        role: master
+        enabled: true
+      - ring_id: 2
+        role: transit
+        enabled: true
+    work_mode: standard
+    state: present
+```
+
+### QinQ (VLAN Stacking)
+
+```yaml
+# Configure QinQ
+- name: Set up QinQ
+  xike.xikeos.xikeos_qinq:
+    config:
+      mode: customer
+      inner_tpid: "0x8100"
+      outer_tpid: "0x88a8"
+      vlan_inserts:
+        - start_vlan: 100
+          end_vlan: 200
+          service_vlan: 500
+          priority: 0
+      vlan_pass_throughs:
+        - start_vlan: 300
+          end_vlan: 400
+    state: present
+```
+
+### Flex-Link / Monitor-Link
+
+```yaml
+# Configure Flex-Link backup
+- name: Configure Flex-Link
+  xike.xikeos.xikeos_flex_monitor_link:
+    config:
+      flex_links:
+        - group_id: 1
+          master_port:
+            type: eth
+            id: "0/0/1"
+          slave_port:
+            type: eth
+            id: "0/0/2"
+          preemption_mode: enabled
+      monitor_links:
+        - uplink:
+            type: eth
+            id: "0/0/24"
+          downlinks:
+            - type: eth
+              id: "0/0/1"
+            - type: eth
+              id: "0/0/2"
+    state: present
+```
+
+### Port Isolation
+
+```yaml
+# Create port isolation group
+- name: Isolate access ports
+  xike.xikeos.xikeos_port_isolate:
+    config:
+      group_id: 1
+      members:
+        - ethernet 0/0/1
+        - ethernet 0/0/2
+        - ethernet 0/0/3
+    state: present
+```
+
+## Playbook Patterns
+
+### Configuration Backup
+
+```yaml
+# backup_config.yml
+---
+- name: Backup Xike Switch Configuration
+  hosts: xike_switches
+  gather_facts: no
+  tasks:
+    - name: Run show running-config
+      xike.xikeos.xikeos_command:
+        commands:
+          - show running-config
+      register: config_output
+
+    - name: Save backup to file
+      ansible.builtin.copy:
+        content: "{{ config_output.stdout[0] }}"
+        dest: "backups/{{ inventory_hostname }}_{{ ansible_date_time.date }}.cfg"
+      delegate_to: localhost
+```
+
+### Full Deployment
+
+```yaml
+# deploy_switch.yml
+---
+- name: Deploy Xike Switch Configuration
+  hosts: xike_switches
+  gather_facts: no
+  tasks:
+    - name: Create VLANs
+      xike.xikeos.xikeos_vlans:
+        config:
+          - vlan_id: 100
+            name: DATA
+          - vlan_id: 200
+            name: VOICE
+        state: merged
+
+    - name: Configure L3 interface
+      xike.xikeos.xikeos_l3_interfaces:
+        config:
+          - name: vlan-interface 100
+            ipv4:
+              - address: "{{ mgmt_ip }}"
+                subnet_mask: 255.255.255.0
+        state: merged
+
+    - name: Configure access ports
+      xike.xikeos.xikeos_l2_interfaces:
+        config:
+          - name: ethernet 0/0/1
+            mode: access
+            access_vlan: 100
+          - name: ethernet 0/0/2
+            mode: access
+            access_vlan: 200
+        state: merged
+
+    - name: Configure trunk uplink
+      xike.xikeos.xikeos_l2_interfaces:
+        config:
+          - name: ethernet 0/0/24
+            mode: trunk
+            trunk_allowed_vlan: "100,200"
+        state: merged
+
+    - name: Save configuration
+      xike.xikeos.xikeos_config:
+        lines:
+          - write memory
+        save: true
+```
+
+### Health Check
+
+```yaml
+# health_check.yml
+---
+- name: Xike Switch Health Check
+  hosts: xike_switches
+  gather_facts: no
+  tasks:
+    - name: Show version
+      xike.xikeos.xikeos_command:
+        commands:
+          - show version
+      register: version
+
+    - name: Show VLAN brief
+      xike.xikeos.xikeos_command:
+        commands:
+          - show vlan brief
+      register: vlans
+
+    - name: Show interface status
+      xike.xikeos.xikeos_command:
+        commands:
+          - show interface status
+      register: interfaces
+
+    - name: Show spanning-tree
+      xike.xikeos.xikeos_command:
+        commands:
+          - show spanning-tree
+      register: stp
+
+    - name: Display health summary
+      ansible.builtin.debug:
+        msg: |
+          === {{ inventory_hostname }} Health Check ===
+          Version: {{ version.stdout[0] | first_line }}
+          VLANs configured: {{ vlans.stdout[0] | count_lines }}
+          STP Root: {{ stp.stdout[0] | regex_search('Root ID.*') }}
+```
+
+## Credential Management
+
+Never store passwords in plain text. Use `ansible-vault` for encryption.
+
+### Encrypt a Password
+
+```bash
+# Create or edit the vault file
+ansible-vault create group_vars/xike_switches/vault.yml
+
+# Add encrypted content:
+# vault_switch_password: my_secret_password
+# vault_enable_password: my_enable_password
+```
+
+### Reference in Inventory
+
+```yaml
+# inventory.yml
+all:
+  children:
+    xike_switches:
+      hosts:
+        core-sw01:
+          ansible_host: 192.168.1.100
+          ansible_user: admin
+          ansible_password: "{{ vault_switch_password }}"
+```
+
+### Run Playbooks with Vault
+
+```bash
+# Prompt for vault password
+ansible-playbook -i inventory.yml deploy_switch.yml --ask-vault-pass
+
+# Use vault password file
+ansible-playbook -i inventory.yml deploy_switch.yml --vault-password-file ~/.vault_pass
+
+# Use multiple vault IDs
+ansible-playbook -i inventory.yml deploy_switch.yml --vault-id prod@prompt
+```
+
+## Cisco IOS Comparison
+
+Xike switches use a Cisco IOS-like CLI with some key differences:
+
+| Feature | Cisco IOS | Xike OS |
+|---------|-----------|---------|
+| **Port Mode** | `switchport mode access/trunk` | `switchport link-type access/trunk/hybrid` |
+| **Hybrid Mode** | Not available | `switchport link-type hybrid` |
+| **Port Channel** | `interface Port-channel1` | `interface eth-trunk 1` |
+| **Port Mirroring** | `monitor session 1` | `mirror group 1` |
+| **VLAN Interface** | `interface Vlan100` | `interface vlan-interface 100` |
+| **Port Naming** | `GigabitEthernet0/1` | `ethernet 0/0/1` |
+| **Ring Protection** | FlexLink / REP | ERPS (G.8032) / EAPS |
+| **QinQ** | `switchport voice vlan` | `qinq` with explicit TPID/VLAN mapping |
+| **ACL Ranges** | 1-99 (std), 100-199, 1300-2699 | 1-999 (std), 1000-1999 (MAC), 2000-2999 (mixed) |
+| **STP** | `spanning-tree mode pvst` | `stp mode pvst` |
+| **Save Config** | `write memory` | `write memory` |
+| **Show VLAN** | `show vlan brief` | `show vlan brief` |
+| **LACP** | `channel-group 1 mode active` | `eth-trunk 1 mode dynamic lacp-mode active` |
+
+## Development
+
+### Project Structure
+
+```
+xike-xikeos/
+├── galaxy.yml                          # Collection metadata
+├── README.md                           # This file
+├── plugins/
+│   ├── modules/                        # Ansible modules
+│   │   ├── xikeos_vlans.py             # VLAN management
+│   │   ├── xikeos_interfaces.py        # Interface configuration
+│   │   ├── xikeos_l2_interfaces.py     # L2 access/trunk/hybrid
+│   │   ├── xikeos_l3_interfaces.py     # L3 VLAN interfaces
+│   │   ├── xikeos_lag_interfaces.py    # LAG eth-trunk bundles
+│   │   ├── xikeos_ospfv2.py            # OSPF routing
+│   │   ├── xikeos_static_routes.py     # Static routes
+│   │   ├── xikeos_acls.py              # Access Control Lists
+│   │   ├── xikeos_stp.py               # Spanning Tree Protocol
+│   │   ├── xikeos_mirror.py            # Port mirroring
+│   │   ├── xikeos_port_isolate.py      # Port isolation
+│   │   ├── xikeos_erps.py              # ERPS ring protection
+│   │   ├── xikeos_eaps.py              # EAPS protection
+│   │   ├── xikeos_qinq.py              # QinQ VLAN stacking
+│   │   ├── xikeos_flex_monitor_link.py # Flex-Link / Monitor-Link
+│   │   ├── xikeos_config.py            # Raw config push
+│   │   └── xikeos_command.py           # Read-only commands
+│   └── module_utils/
+│       ├── xikeos.py                   # Shared utilities
+│       └── facts/                      # Facts parsers
+│           ├── vlans.py
+│           ├── interfaces.py
+│           ├── l2_interfaces.py
+│           ├── l3_interfaces.py
+│           ├── lag_interfaces.py
+│           ├── ospfv2.py
+│           ├── static_routes.py
+│           ├── acls.py
+│           ├── stp.py
+│           ├── mirror.py
+│           ├── port_isolate.py
+│           ├── erps.py
+│           ├── eaps.py
+│           ├── qinq.py
+│           └── flex_monitor_link.py
+└── tests/                              # Unit tests
+```
+
+### Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/my-feature`)
+3. Commit your changes (`git commit -am 'Add my feature'`)
+4. Push to the branch (`git push origin feature/my-feature`)
+5. Open a Pull Request
+
+### Running Tests
+
+```bash
+# Run all tests
+pytest tests/
+
+# Run with verbose output
+pytest tests/ -v
+
+# Run specific module tests
+pytest tests/test_xikeos_vlans.py -v
+
+# Run linting
+ansible-lint plugins/
+```
+
+### Adding a New Module
+
+1. Create the module file in `plugins/modules/xikeos_<name>.py`
+2. Create the facts parser in `plugins/module_utils/facts/<name>.py`
+3. Add tests in `tests/test_xikeos_<name>.py`
+4. Update this README with the new module in the Available Modules table
+5. Submit a PR
 
 ## License
 
-MIT
+MIT License. See [LICENSE](LICENSE) for details.
