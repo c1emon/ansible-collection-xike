@@ -10,10 +10,13 @@ COMMAND_MAP = {
     'show_interface': 'show interface',
     'show_interface_brief': 'show interface brief',
     'show_ip_route': 'show ip route',
+    'show_ipv6_route': 'show ipv6 route',
     'show_ip_ospf_neighbor': 'show ip ospf neighbor',
     'show_mac_address_table': 'show mac-address-table',
     'show_stp': 'show stp interface brief',
     'show_running_config': 'show running-config',
+    'show_access_list_config': 'show access-list config',
+    'show_access_list_runtime': 'show access-list runtime',
     'configure_terminal': 'configure terminal',
     'write_memory': 'write memory',
 }
