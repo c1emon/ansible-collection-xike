@@ -21,7 +21,7 @@ def get_capabilities(module):
         capabilities = Connection(module._socket_path).get_capabilities()
     except ConnectionError as exc:
         module.fail_json(msg=to_text(exc))
-        raise
+        return {}
     module._xikeos_capabilities = json.loads(capabilities)
     return module._xikeos_capabilities
 

@@ -78,6 +78,15 @@ def test_cliconf_get_config_edit_config_and_capabilities():
     assert capabilities["format"] == ["text"]
     assert capabilities["device_operations"]["supports_commit"] is False
 
+    with patch.object(
+        cliconf_module.CliconfBase,
+        "get_capabilities",
+        return_value=json.dumps({"rpc": [], "device_operations": {}, "format": [], "network_api": ""}),
+    ):
+        capabilities = json.loads(plugin.get_capabilities())
+
+    assert capabilities["rpc"] == ["get_config", "edit_config", "run_commands"]
+
 
 def test_xikeos_command_stdout_and_lines():
     module = _fake_module({"commands": ["show version", "show vlan brief"]})

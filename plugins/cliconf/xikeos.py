@@ -81,6 +81,8 @@ class Cliconf(CliconfBase):
 
     def get_capabilities(self):
         result = super(Cliconf, self).get_capabilities()
+        if isinstance(result, str):
+            result = json.loads(result)
         result["rpc"] += ["get_config", "edit_config", "run_commands"]
         result["device_operations"] = {
             "supports_diff_replace": False,
