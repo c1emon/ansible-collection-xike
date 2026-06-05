@@ -45,7 +45,10 @@ EXAMPLES = """
 """
 
 from ansible.module_utils.basic import AnsibleModule
-import json
+from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config, run_commands
+
+
+SAVE_COMMAND = 'write memory'
 
 
 def main():
@@ -62,23 +65,26 @@ def main():
     lines = module.params.get('lines', [])
     save = module.params.get('save', False)
 
-    if not lines:
-        module.exit_json(msg='No lines to configure')
+    if not lines and not save:
+        module.exit_json(changed=False, commands=[], saved=False, msg='No lines to configure')
 
     result = {
-        'changed': False,
-        'commands': lines,
+        'changed': bool(lines),
+        'commands': list(lines),
+        'saved': False,
     }
 
     if module.check_mode:
         module.exit_json(**result)
 
-    # The actual push would happen via the connection plugin
-    # In check mode, we just return the commands
-    result['changed'] = True
+    if lines:
+        response = load_config(module, lines)
+        result['response'] = response.get('response', response) if isinstance(response, dict) else response
 
-    if save:
-        result['commands'].append('write memory')
+    if save and result['changed']:
+        run_commands(module, [SAVE_COMMAND], check_rc=True)
+        result['commands'].append(SAVE_COMMAND)
+        result['saved'] = True
 
     module.exit_json(**result)
 

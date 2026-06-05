@@ -87,9 +87,8 @@ commands:
 """
 
 from ansible.module_utils.basic import AnsibleModule
-from ansible_collections.xike.xikeos.plugins.module_utils.xikeos import (
-    COMMAND_MAP,
-)
+from ansible_collections.xike.xikeos.plugins.module_utils.facts.vlans import parse_vlan_brief
+from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config, run_commands
 
 
 def vlan_id_range(vlan_ids):
@@ -120,48 +119,84 @@ def vlan_id_range(vlan_ids):
     return ",".join(ranges)
 
 
-def get_commands(config, state):
-    """Generate CLI commands from VLAN configuration."""
+def _normalize_vlan(vlan):
+    normalized = {
+        "vlan_id": int(vlan["vlan_id"]),
+        "name": vlan.get("name") or "",
+        "state": vlan.get("state") or vlan.get("status") or "active",
+    }
+    if "ports" in vlan:
+        normalized["ports"] = list(vlan.get("ports") or [])
+    return normalized
+
+
+def _index_vlans(vlans):
+    return {item["vlan_id"]: _normalize_vlan(item) for item in vlans}
+
+
+def get_commands(config, state, current=None):
+    """Generate minimal CLI commands from VLAN configuration and current state."""
     commands = []
+    current_by_id = _index_vlans(current or [])
 
     if state == "merged":
         for vlan in config:
+            vlan = _normalize_vlan(vlan)
             vlan_id = vlan["vlan_id"]
             name = vlan.get("name", "")
-            vlan_state = vlan.get("state", "active")
+            existing = current_by_id.get(vlan_id)
+            if existing and existing.get("name", "") == name and existing.get("state", "active") == vlan.get("state", "active"):
+                continue
 
-            # Create VLAN
             commands.append(f"vlan {vlan_id}")
-
-            # Set name if provided
             if name:
                 commands.append(f"description {name}")
-
-            # Exit VLAN mode to be safe
             commands.append("exit")
 
     elif state == "replaced":
-        # For replaced, we need to handle both create/update and delete
-        # This is simplified - in production, you'd compare with running config
+        desired_ids = {int(vlan["vlan_id"]) for vlan in config}
+        for vlan_id in sorted(set(current_by_id) - desired_ids):
+            if vlan_id != 1:
+                commands.append(f"no vlan {vlan_id}")
         for vlan in config:
+            vlan = _normalize_vlan(vlan)
             vlan_id = vlan["vlan_id"]
             name = vlan.get("name", "")
-            vlan_state = vlan.get("state", "active")
-
-            # Create or update VLAN
+            existing = current_by_id.get(vlan_id)
+            if existing and existing.get("name", "") == name and existing.get("state", "active") == vlan.get("state", "active"):
+                continue
             commands.append(f"vlan {vlan_id}")
-
             if name:
                 commands.append(f"description {name}")
-
             commands.append("exit")
 
     elif state == "deleted":
         for vlan in config:
             vlan_id = vlan["vlan_id"]
-            commands.append(f"no vlan {vlan_id}")
+            if vlan_id in current_by_id or not current:
+                commands.append(f"no vlan {vlan_id}")
 
     return commands
+
+
+def gather_vlans(module):
+    stdout = run_commands(module, ["show vlan brief"], check_rc=True)
+    return [_normalize_vlan(vlan) for vlan in parse_vlan_brief(stdout[0] if stdout else "")]
+
+
+def build_after_state(before, desired, state):
+    after = _index_vlans(before)
+    if state in ("merged", "replaced"):
+        if state == "replaced":
+            desired_ids = {int(vlan["vlan_id"]) for vlan in desired}
+            after = {vlan_id: vlan for vlan_id, vlan in after.items() if vlan_id in desired_ids or vlan_id == 1}
+        for vlan in desired:
+            normalized = _normalize_vlan(vlan)
+            after[normalized["vlan_id"]] = normalized
+    elif state == "deleted":
+        for vlan in desired:
+            after.pop(int(vlan["vlan_id"]), None)
+    return [after[vlan_id] for vlan_id in sorted(after)]
 
 
 def main():
@@ -205,20 +240,27 @@ def main():
     result = {
         "changed": False,
         "commands": [],
+        "before": [],
+        "after": [],
     }
 
+    before = gather_vlans(module)
+    result["before"] = before
+
     if not config:
+        result["after"] = before
         module.exit_json(**result)
 
-    # Generate commands
-    commands = get_commands(config, state)
+    commands = get_commands(config, state, before)
     result["commands"] = commands
+    result["changed"] = bool(commands)
+    result["after"] = build_after_state(before, config, state) if commands else before
 
     if module.check_mode:
         module.exit_json(**result)
 
     if commands:
-        result["changed"] = True
+        load_config(module, commands)
 
     module.exit_json(**result)
 

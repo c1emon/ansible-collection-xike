@@ -2,7 +2,7 @@
 
 ## Overview
 
-The `xike.xikeos` Ansible Collection follows the standard Ansible network module architecture pattern, built on top of the `ansible.netcommon` framework. It communicates with Xike (兮克) switches via SSH using Netmiko's `raisecom` device type.
+The `xike.xikeos` Ansible Collection follows the standard Ansible network module architecture: playbooks use `ansible.netcommon.network_cli`, `ansible_network_os: xike.xikeos.xikeos`, and this collection's terminal and cliconf plugins. Netmiko Raisecom support is an optional CLI-behavior reference, not the primary backend.
 
 ## Architecture Diagram
 
@@ -65,17 +65,17 @@ The `xike.xikeos` Ansible Collection follows the standard Ansible network module
                                   │
                                   ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                    Connection Plugin (SSH)                                   │
+│          ansible.netcommon.network_cli Platform Plugins                       │
 │                                                                              │
 │  ┌─────────────────────────────────────────────────────────────────────┐    │
-│  │  xike.xikeos.xikeos connection plugin                              │    │
+│  │  terminal/xikeos.py + cliconf/xikeos.py                            │    │
 │  │                                                                      │    │
-│  │  - Extends ansible.netcommon.network_cli.Connection                 │    │
-│  │  - Uses Netmiko with device_type: raisecom                          │    │
-│  │  - Provides SSH transport to Xike switches                          │    │
+│  │  - Terminal plugin recognizes prompts, disables paging, detects errors │  │
+│  │  - Cliconf plugin runs show commands and applies configuration       │    │
+│  │  - network_cli owns the SSH transport                                │    │
 │  │                                                                      │    │
 │  │  Connection Flow:                                                    │    │
-│  │  Ansible ──► Connection Plugin ──► Netmiko ──► SSH ──► Xike Switch  │    │
+│  │  Module ──► cliconf ──► network_cli ──► SSH ──► Xike Switch         │    │
 │  └──────────────────────────────┬──────────────────────────────────────┘    │
 │                                 │                                           │
 └─────────────────────────────────┼───────────────────────────────────────────┘
@@ -95,14 +95,14 @@ The `xike.xikeos` Ansible Collection follows the standard Ansible network module
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-## Connection Plugin Flow
+## network_cli Platform Flow
 
-The connection plugin establishes SSH connectivity to Xike switches:
+The Ansible `network_cli` connection establishes SSH connectivity and loads this collection's platform plugins:
 
 ```
 ┌──────────────┐    ┌──────────────────┐    ┌──────────┐    ┌──────────────┐
 │   Ansible    │───►│ Connection Plugin │───►│  Netmiko │───►│  Xike Switch │
-│   Module     │    │  (xikeos.py)     │    │ raisecom │    │              │
+│   Module     │    │ cliconf/terminal │    │network_cli│   │              │
 └──────────────┘    └──────────────────┘    └──────────┘    └──────────────┘
        │                    │                    │                  │
        │                    │                    │                  │
@@ -114,14 +114,19 @@ The connection plugin establishes SSH connectivity to Xike switches:
        │◄───────────────────┤◄───────────────────┤◄─────────────────┤
 ```
 
-### Connection Plugin Implementation
+### Platform Plugin Implementation
 
-The connection plugin (`plugins/connection/xikeos.py`) extends `ansible.netcommon.network_cli.Connection`:
+The supported inventory path is:
 
-- **Transport**: Uses Netmiko's SSH transport
-- **Device Type**: Maps to `raisecom` device type in Netmiko
-- **Protocol**: SSH (port 22 by default)
-- **CLI Style**: Cisco IOS-like command syntax
+```yaml
+ansible_connection: ansible.netcommon.network_cli
+ansible_network_os: xike.xikeos.xikeos
+```
+
+- **Transport**: `ansible.netcommon.network_cli` over SSH
+- **Terminal**: `plugins/terminal/xikeos.py` prompt, paging, privilege, and error handling
+- **Cliconf**: `plugins/cliconf/xikeos.py` operational command and configuration APIs
+- **References**: Netmiko Raisecom, TextFSM, Genie, and pyATS may inform parser and prompt work, but are not required runtime dependencies.
 
 ## Resource Module Lifecycle
 
@@ -184,8 +189,8 @@ Each resource module follows a consistent lifecycle:
 
 #### 4. Push Commands
 - Send generated commands to the device
-- Commands are executed via the connection plugin
-- Connection plugin uses Netmiko to send commands over SSH
+- Commands are executed via the cliconf plugin over `network_cli`
+- `network_cli` sends commands over SSH
 - Commands are sent in sequence, respecting configuration mode
 
 #### 5. Verify State

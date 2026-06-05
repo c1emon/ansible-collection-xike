@@ -57,8 +57,8 @@ The `xike.xikeos` collection provides a complete set of Ansible modules for auto
                             │
                             ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                  Connection Plugin (SSH)                        │
-│              Uses Netmiko with device_type: raisecom             │
+│        ansible.netcommon.network_cli + terminal/cliconf          │
+│        ansible_network_os: xike.xikeos.xikeos                    │
 └───────────────────────────┬─────────────────────────────────────┘
                             │
                             ▼
@@ -73,14 +73,15 @@ The `xike.xikeos` collection provides a complete set of Ansible modules for auto
 | Component | Requirement | Notes |
 |-----------|-------------|-------|
 | **Ansible** | >= 2.15 | Core automation engine |
-| **Netmiko** | >= 4.7.0 | Uses `device_type: raisecom` for SSH communication |
+| **ansible.netcommon** | >= 5.0 | Standard `network_cli`, terminal, and cliconf plugins |
+| **Netmiko** | optional | Reference only for Raisecom-like CLI behavior |
 | **Python** | >= 3.10 | Runtime dependency |
 
 ### Dependencies
 
 ```bash
 # Install Python dependencies
-pip install "ansible>=2.15" "netmiko>=4.7.0"
+ansible-galaxy collection install ansible.netcommon
 ```
 
 ## Installation
@@ -122,7 +123,7 @@ source venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt  # or:
-pip install "ansible>=2.15" "netmiko>=4.7.0" pytest ansible-lint
+pip install "ansible>=2.15" pytest ansible-lint
 
 # Run tests
 pytest tests/
@@ -142,8 +143,8 @@ all:
           ansible_host: 192.168.1.100
           ansible_user: admin
           ansible_password: "{{ vault_switch_password }}"
-          ansible_network_os: xike.xikeos
-          ansible_connection: netconf  # or httpapi/ssh
+          ansible_network_os: xike.xikeos.xikeos
+          ansible_connection: ansible.netcommon.network_cli
 ```
 
 ### 2. Create VLANs
@@ -186,8 +187,8 @@ all:
           ansible_port: 22                     # SSH port (default: 22)
           ansible_user: admin                  # Login username
           ansible_password: secret             # Login password (use vault!)
-          ansible_network_os: xike.xikeos     # Collection FQCN
-          ansible_connection: netconf          # Connection type
+          ansible_network_os: xike.xikeos.xikeos  # Collection platform FQCN
+          ansible_connection: ansible.netcommon.network_cli
           ansible_become: yes                  # Enable privilege escalation
           ansible_become_method: enable        # Enable mode method
           ansible_become_password: secret      # Enable password
@@ -196,14 +197,14 @@ all:
           ansible_host: 192.168.1.101
           ansible_user: admin
           ansible_password: "{{ vault_access_sw_password }}"
-          ansible_network_os: xike.xikeos
-          ansible_connection: netconf
+          ansible_network_os: xike.xikeos.xikeos
+          ansible_connection: ansible.netcommon.network_cli
 
     # Group variables (apply to all switches in group)
     xike_switches:
       vars:
-        ansible_network_os: xike.xikeos
-        ansible_connection: netconf
+        ansible_network_os: xike.xikeos.xikeos
+        ansible_connection: ansible.netcommon.network_cli
         ansible_user: admin
         ansible_become: yes
         ansible_become_method: enable

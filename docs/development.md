@@ -21,9 +21,10 @@ xike.xikeos/
 ├── requirements.txt              # Python dependencies
 ├── plugins/
 │   ├── __init__.py
-│   ├── connection/
-│   │   ├── __init__.py
-│   │   └── xikeos.py            # SSH connection plugin
+│   ├── terminal/
+│   │   └── xikeos.py            # Prompt, paging, error handling
+│   ├── cliconf/
+│   │   └── xikeos.py            # Command/config API over network_cli
 │   ├── modules/
 │   │   ├── __init__.py
 │   │   ├── xikeos_interfaces.py
@@ -83,15 +84,20 @@ xike.xikeos/
 
 ### Key Components
 
-#### Connection Plugin (`plugins/connection/xikeos.py`)
-- Extends `ansible.netcommon.network_cli.Connection`
-- Uses Netmiko with `device_type: raisecom`
-- Provides SSH transport to Xike switches
+#### Platform Plugins (`plugins/terminal/xikeos.py`, `plugins/cliconf/xikeos.py`)
+- Inventory must use `ansible_connection: ansible.netcommon.network_cli`.
+- `ansible_network_os: xike.xikeos.xikeos` selects this collection's terminal and cliconf plugins.
+- `terminal/xikeos.py` owns prompt matching, paging disablement, privilege-mode handling, and command error detection.
+- `cliconf/xikeos.py` owns show command execution, running-config retrieval, configuration edits, device info, and capabilities.
+
+#### Dependency guidance
+- Required Ansible collection dependency: `ansible.netcommon`.
+- Optional references only: Netmiko Raisecom prompt behavior, TextFSM templates, Genie/pyATS parser conventions. Do not make these mandatory runtime dependencies unless a later OpenSpec change explicitly chooses that architecture.
 
 #### Modules (`plugins/modules/`)
 - Each module implements a specific feature
-- Modules generate CLI commands based on desired state
-- Support check mode and diff
+- Modules gather current state where needed, generate minimal CLI commands, and execute through cliconf helpers.
+- Support check mode and consistent `before`, `after`, `commands`, and `changed` results for reference resource modules.
 
 #### Module Utils (`plugins/module_utils/`)
 - **xikeos.py**: COMMAND_MAP and constants

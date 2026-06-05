@@ -23,6 +23,9 @@ def parse_vlan_brief(output):
     1    default                          active    e0/0/1, e0/0/2
     100  DATA                             active
     """
+    if not output:
+        return []
+
     vlans = []
 
     # Split output into lines
@@ -102,6 +105,7 @@ def parse_vlan_line(line):
     return {
         "vlan_id": vlan_id,
         "name": name,
+        "state": status,
         "status": status,
         "ports": ports,
     }

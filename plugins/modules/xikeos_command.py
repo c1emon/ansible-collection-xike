@@ -35,6 +35,12 @@ EXAMPLES = """
 """
 
 from ansible.module_utils.basic import AnsibleModule
+from ansible.module_utils.common.text.converters import to_text
+from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.xikeos import run_commands
+
+
+def _split_lines(output):
+    return to_text(output, errors='surrogate_or_strict').splitlines()
 
 
 def main():
@@ -47,10 +53,19 @@ def main():
 
     commands = module.params['commands']
 
+    stdout = []
+    try:
+        stdout = run_commands(module, commands, check_rc=True)
+    except Exception as exc:
+        module.fail_json(msg='command execution failed', commands=commands, error=to_text(exc))
+
+    stdout = [to_text(item, errors='surrogate_or_strict') for item in stdout]
+
     result = {
         'changed': False,
         'commands': commands,
-        'stdout': [],
+        'stdout': stdout,
+        'stdout_lines': [_split_lines(item) for item in stdout],
     }
 
     module.exit_json(**result)

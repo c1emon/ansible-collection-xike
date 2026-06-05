@@ -6,7 +6,8 @@ authors:
   - Andy
 license:
   - MIT
-dependencies: []
+dependencies:
+  ansible.netcommon: ">=5.0.0"
 repository: https://github.com/andy/xike-xikeos
 documentation: https://github.com/andy/xike-xikeos
 homepage: https://github.com/andy/xike-xikeos

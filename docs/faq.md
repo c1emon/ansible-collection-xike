@@ -4,25 +4,23 @@ Frequently asked questions about the `xike.xikeos` Ansible Collection.
 
 ## General
 
-### Why Netmiko instead of direct SSH?
+### Why `ansible.netcommon.network_cli` instead of a custom Netmiko backend?
 
-The `xike.xikeos` collection uses **Netmiko** as the SSH backend for several important reasons:
+The supported architecture uses **`ansible.netcommon.network_cli`** with this collection's terminal and cliconf plugins:
 
-1. **Proven Reliability**: Netmiko has been battle-tested with thousands of network devices. It handles SSH session management, reconnection, and error recovery.
+1. **Standard Ansible Network Pattern**: `network_cli` is the supported connection path for CLI network collections.
 
-2. **Device Type Support**: Netmiko provides a `raisecom` device type that closely matches Xike's CLI behavior. This includes:
+2. **Collection-owned Platform Behavior**: `terminal/xikeos.py` and `cliconf/xikeos.py` define Xike prompt, error, show, and config behavior.
    - Proper prompt detection
    - Command encoding/decoding
    - Session timeout handling
    - Pagination support
 
-3. **Simplified Connection Plugin**: Instead of implementing SSH from scratch, the connection plugin (`plugins/connection/xikeos.py`) extends `ansible.netcommon.network_cli.Connection`, which already integrates with Netmiko.
+3. **Clear Dependencies**: `ansible.netcommon` is required. Netmiko Raisecom, TextFSM, Genie, and pyATS are optional references/tools only.
 
-4. **Consistent Behavior**: Using Netmiko ensures consistent behavior across different SSH implementations and Python versions.
+4. **Consistent Module API**: modules call Ansible connection helpers rather than returning generated commands without device execution.
 
-5. **Community Support**: Netmiko has an active community and regular updates for new device support and bug fixes.
-
-**Alternative considered**: Direct SSH libraries like `paramiko` would require reimplementing many features that Netmiko already provides.
+**Alternative considered**: a custom Netmiko backend remains a reference option, but it duplicates `network_cli` behavior and is not the supported default.
 
 ---
 
@@ -113,8 +111,8 @@ all:
           ansible_port: 22                    # SSH port
           ansible_user: admin                 # Username
           ansible_password: "secret"          # Password
-          ansible_network_os: xike.xikeos    # Collection name
-          ansible_connection: netconf         # Connection type
+          ansible_network_os: xike.xikeos.xikeos
+          ansible_connection: ansible.netcommon.network_cli
 ```
 
 #### 3. Test with ansible ping
@@ -126,10 +124,11 @@ ansible xike_switches -m ping -i inventory.yml
 ansible xike_switches -m ping -i inventory.yml -vvv
 ```
 
-#### 4. Check Netmiko Device Type
-The connection plugin uses Netmiko with `device_type: raisecom`. Ensure:
-- Netmiko is installed: `pip install netmiko>=4.7.0`
-- The device responds to IOS-like commands
+#### 4. Check platform plugin selection
+Ensure:
+- `ansible.netcommon` is installed.
+- `ansible_network_os` is exactly `xike.xikeos.xikeos`.
+- The device responds to IOS-like commands and supports the prompt/error variants documented as open validation items.
 
 #### 5. Debug Mode
 ```bash
@@ -147,7 +146,7 @@ ANSIBLE_DEBUG=1 ansible-playbook playbook.yml -i inventory.yml
 | `Connection refused` | SSH service not running | Check switch SSH config |
 | `Authentication failed` | Wrong credentials | Verify username/password |
 | `Timeout` | Network issue | Check firewall, increase timeout |
-| `Device type not found` | Netmiko version issue | Update Netmiko: `pip install --upgrade netmiko` |
+| `Could not find terminal/cliconf plugin` | Wrong `ansible_network_os` or missing collection | Use `xike.xikeos.xikeos` and install this collection |
 | `Command timeout` | Long-running commands | Increase `ansible_timeout` |
 
 ---

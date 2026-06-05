@@ -2,6 +2,44 @@
 
 > 本文档由兮克三层交换机配置手册 PDF 自动转换生成。
 
+> 验证说明：自动转换内容存在标题、表格和代码块错位。当前实现只将下列人工复核过的命令作为 command/config/VLAN 参考：`show version`、`show running-config`、`show startup-config`、`show vlan brief`、`configure terminal`、`end`、`vlan <vlan-id>`、`description <name>`、`no vlan <vlan-id>`、`terminal length 0`、`terminal width 512`、`write memory`（保存命令仍需真机确认）。其他损坏章节不得直接作为实现依据。
+
+## 已验证实现参考：命令、配置与 VLAN
+
+### 运行命令
+
+```text
+show version
+show running-config
+show startup-config
+show vlan brief
+```
+
+### 终端与配置模式
+
+```text
+terminal length 0
+terminal width 512
+configure terminal
+end
+```
+
+### VLAN 配置
+
+```text
+vlan <vlan-id>
+description <name>
+no vlan <vlan-id>
+```
+
+### 保存配置
+
+```text
+write memory
+```
+
+`write memory` is implemented only behind explicit `xikeos_config save: true` and remains an open real-device validation item.
+
 
 # 1. 端口配置
 
