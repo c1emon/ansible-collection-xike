@@ -177,7 +177,7 @@ def main():
     if module.check_mode:
         module.exit_json(**result)
 
-    # Commands are ready to be executed by the connection plugin
+    # Non-reference module: report planned commands; execution will be added in a follow-up refactor.
     result['changed'] = True
     module.exit_json(**result)
 

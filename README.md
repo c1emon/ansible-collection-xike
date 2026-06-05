@@ -9,7 +9,7 @@ Ansible Collection for managing **Xike (兮克) switches** with Cisco IOS-like C
 
 ## Overview
 
-The `xike.xikeos` collection provides a complete set of Ansible modules for automating **Xike (兮克) Ethernet switches**. Xike switches use a Cisco IOS-like command-line interface, making this collection familiar to anyone with IOS experience while providing full support for Xike-specific features.
+The `xike.xikeos` collection provides Ansible modules for automating **Xike (兮克) Ethernet switches**. Xike switches use a Cisco IOS-like command-line interface, making this collection familiar to anyone with IOS experience while supporting Xike-specific features.
 
 ### Who is this for?
 
@@ -19,11 +19,13 @@ The `xike.xikeos` collection provides a complete set of Ansible modules for auto
 
 ### Key Features
 
-- **17 modules** covering L2, L3, routing, security, and Xike-specific features
+- **17 module files** covering L2, L3, routing, security, and Xike-specific features
 - **Hybrid port mode** — a Xike-specific feature for flexible VLAN tagging
 - **ERPS/EAPS** ring protection for carrier-grade Ethernet
 - **QinQ tunneling** for service provider deployments
-- **Idempotent resource modules** with `merged`, `replaced`, and `deleted` states
+- **Reference execution path** for `xikeos_command`, `xikeos_config`, and `xikeos_vlans` through `network_cli`/cliconf
+- **Reference idempotent VLAN module** with current-state gathering, check mode, and `before`/`after` results
+- Other resource modules currently provide command-generation/planned-command behavior and are candidates for follow-up execution-path refactors.
 
 ## Architecture
 
@@ -214,7 +216,9 @@ all:
 
 > 本 Collection 基于兮克三层配置手册（97 章）开发。以下清单标注每章的实现状态。
 
-### ✅ 已实现（19 章）
+### ✅ 模块覆盖（19 章）
+
+> 状态说明：`xikeos_command`、`xikeos_config`、`xikeos_vlans` 已接入 `network_cli`/cliconf 执行路径；其余资源模块目前主要生成/报告计划命令，尚未全部完成真机执行路径重构。
 
 | 手册章节 | 功能 | 对应模块 | 备注 |
 |---------|------|---------|------|
@@ -276,18 +280,18 @@ all:
 | 90. 策略路由 | route-map, prefix-list | 中 | |
 | 95-97. PIM/CFM | 组播路由/OAM | 高 | |
 
-### 📊 覆盖率统计
+### 📊 模块覆盖率统计
 
 ```
 手册总章节数:    97
-已实现:          22 章（含兜底模块覆盖的 2 章）
+模块覆盖:        22 章（含兜底模块覆盖的 2 章）
 未实现:          ~28 章
 用 xikeos_config 兜底: ~10 章（可用原始命令配置）
 覆盖率（专用模块）: ~23%
 覆盖率（含兜底）:   ~33%
 ```
 
-**核心网络功能（VLAN/接口/路由/STP/安全）已全部覆盖**，缺失的主要是辅助功能（DHCP/组播/AAA/QoS/监控）。
+**核心网络功能（VLAN/接口/路由/STP/安全）已有模块或命令模板覆盖**；其中 VLAN 是当前参考幂等执行模块，其他资源模块仍需后续接入统一执行路径。缺失的主要是辅助功能（DHCP/组播/AAA/QoS/监控）。
 
 ## Usage Examples
 
@@ -325,6 +329,8 @@ all:
 
 ### Interface Configuration
 
+> 当前 `xikeos_interfaces` 示例展示参数和计划命令生成；该模块尚未接入统一 cliconf 执行路径。
+
 ```yaml
 # Configure interface properties
 - name: Set interface parameters
@@ -348,6 +354,8 @@ all:
 ```
 
 ### Layer 2 Interfaces (Access / Trunk / Hybrid)
+
+> 当前 `xikeos_l2_interfaces` 示例展示参数和计划命令生成；该模块尚未接入统一 cliconf 执行路径。
 
 ```yaml
 # Access port
@@ -381,6 +389,8 @@ all:
 ```
 
 ### Layer 3 VLAN Interfaces
+
+> 当前 `xikeos_l3_interfaces` 示例展示参数和计划命令生成；该模块尚未接入统一 cliconf 执行路径。
 
 ```yaml
 # Configure SVI IP address
@@ -719,7 +729,9 @@ all:
       delegate_to: localhost
 ```
 
-### Full Deployment
+### Partial Deployment
+
+> Only `xikeos_vlans` and `xikeos_config` in this example execute through the current reference path. L2/L3 modules shown here currently report planned commands and need follow-up execution-path refactors before they can be used for full deployment.
 
 ```yaml
 # deploy_switch.yml
@@ -737,7 +749,7 @@ all:
             name: VOICE
         state: merged
 
-    - name: Configure L3 interface
+    - name: Plan L3 interface configuration
       xike.xikeos.xikeos_l3_interfaces:
         config:
           - name: vlan-interface 100
@@ -746,7 +758,7 @@ all:
                 subnet_mask: 255.255.255.0
         state: merged
 
-    - name: Configure access ports
+    - name: Plan access port configuration
       xike.xikeos.xikeos_l2_interfaces:
         config:
           - name: ethernet 0/0/1
@@ -757,7 +769,7 @@ all:
             access_vlan: 200
         state: merged
 
-    - name: Configure trunk uplink
+    - name: Plan trunk uplink configuration
       xike.xikeos.xikeos_l2_interfaces:
         config:
           - name: ethernet 0/0/24
@@ -768,7 +780,7 @@ all:
     - name: Save configuration
       xike.xikeos.xikeos_config:
         lines:
-          - write memory
+          - hostname deployed-switch
         save: true
 ```
 
@@ -885,6 +897,10 @@ xike-xikeos/
 ├── galaxy.yml                          # Collection metadata
 ├── README.md                           # This file
 ├── plugins/
+│   ├── terminal/                       # Prompt, paging, and error handling
+│   │   └── xikeos.py
+│   ├── cliconf/                        # Command/config API over network_cli
+│   │   └── xikeos.py
 │   ├── modules/                        # Ansible modules
 │   │   ├── xikeos_vlans.py             # VLAN management
 │   │   ├── xikeos_interfaces.py        # Interface configuration
@@ -905,6 +921,7 @@ xike-xikeos/
 │   │   └── xikeos_command.py           # Read-only commands
 │   └── module_utils/
 │       ├── xikeos.py                   # Shared utilities
+│       ├── network/xikeos/xikeos.py    # Connection helper functions
 │       └── facts/                      # Facts parsers
 │           ├── vlans.py
 │           ├── interfaces.py
@@ -936,13 +953,13 @@ xike-xikeos/
 
 ```bash
 # Run all tests
-pytest tests/
+uv run pytest -q tests/unit
 
 # Run with verbose output
-pytest tests/ -v
+uv run pytest tests/unit -v
 
-# Run specific module tests
-pytest tests/test_xikeos_vlans.py -v
+# Run OpenSpec/network architecture tests
+uv run pytest -q tests/unit/test_openspec_tasks.py
 
 # Run linting
 ansible-lint plugins/
@@ -952,7 +969,7 @@ ansible-lint plugins/
 
 1. Create the module file in `plugins/modules/xikeos_<name>.py`
 2. Create the facts parser in `plugins/module_utils/facts/<name>.py`
-3. Add tests in `tests/test_xikeos_<name>.py`
+3. Add tests in `tests/unit/test_xikeos_<name>.py`
 4. Update this README with the new module in the Available Modules table
 5. Submit a PR
 

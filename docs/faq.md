@@ -135,7 +135,7 @@ Ensure:
 # Run playbook with debug output
 ansible-playbook playbook.yml -i inventory.yml -vvvv
 
-# Check connection plugin logs
+# Check network_cli and platform plugin logs
 ANSIBLE_DEBUG=1 ansible-playbook playbook.yml -i inventory.yml
 ```
 
@@ -410,8 +410,8 @@ The `xike.xikeos` collection works with AWX/Tower:
 
 **AWX/Tower Variables**:
 ```yaml
-ansible_network_os: xike.xikeos
-ansible_connection: netconf
+ansible_network_os: xike.xikeos.xikeos
+ansible_connection: ansible.netcommon.network_cli
 ```
 
 ---

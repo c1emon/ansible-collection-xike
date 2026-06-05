@@ -1,14 +1,45 @@
+# Python bytecode and caches
 __pycache__/
-*.pyc
-*.pyo
-*.egg-info/
-dist/
-build/
-.eggs/
-*.tar.gz
+*.py[cod]
+*$py.class
 .pytest_cache/
-.coverage
-htmlcov/
 .mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Python packaging/build artifacts
+build/
+dist/
+.eggs/
+*.egg-info/
+*.egg
+*.tar.gz
+
+# Virtual environments and local env files
+.venv/
+venv/
+env/
+ENV/
+.env
+.env.*
+
+# Ansible local artifacts
+*.retry
+.ansible/
+ansible.log
+collections/
+
+# Test/development local paths
 .test_path/
+
+# Editor/OS files
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Agent/local tooling
 .opencode

@@ -592,8 +592,8 @@ all:
       ansible_host: 192.168.1.100
       ansible_user: admin
       ansible_password: secret
-      ansible_network_os: xike.xikeos
-      ansible_connection: netconf
+      ansible_network_os: xike.xikeos.xikeos
+      ansible_connection: ansible.netcommon.network_cli
 EOF
 ```
 
@@ -850,14 +850,14 @@ Always support check mode:
 def main():
     module = AnsibleModule(..., supports_check_mode=True)
     
-    # ... generate commands
+    # ... gather state and build commands
     
     result = {"changed": False, "commands": commands}
     
     if module.check_mode:
         module.exit_json(**result)
     
-    # ... apply changes
+    # ... apply changes through cliconf/network_cli
 ```
 
 ---
@@ -898,7 +898,8 @@ Closes #123
 ## Resources
 
 - [Ansible Module Development Guide](https://docs.ansible.com/ansible/latest/dev_guide/developing_modules_general.html)
-- [Netmiko Documentation](https://pynetko.readthedocs.io/)
+- [ansible.netcommon network_cli documentation](https://docs.ansible.com/ansible/latest/collections/ansible/netcommon/network_cli_connection.html)
+- [Netmiko Documentation](https://ktbyers.github.io/netmiko/) — optional CLI behavior reference only
 - [Xike Switch CLI Reference](https://www.xike.com/support/cli-reference)
 
 ---

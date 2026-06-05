@@ -3,11 +3,11 @@ __metaclass__ = type
 
 DOCUMENTATION = """
 connection: xikeos
-short_description: Xike switch SSH connection plugin
+short_description: Legacy Xike network_cli compatibility connection plugin
 version_added: "0.1.0"
 description:
-  - SSH connection plugin for Xike (兮克) switches.
-  - Uses netmiko raisecom device_type as backend.
+  - Compatibility wrapper around ansible.netcommon.network_cli for Xike (兮克) switches.
+  - The supported architecture uses ansible_connection=ansible.netcommon.network_cli and ansible_network_os=xike.xikeos.xikeos.
 options:
   host:
     description: Target device hostname or IP
@@ -40,22 +40,22 @@ EXAMPLES = """
 """
 
 RETURN = """
-  _device_type:
-    description: Netmiko device type used for the connection
+  network_os:
+    description: Xike OS network platform selected by network_cli.
     returned: always
     type: str
-    sample: raisecom
+    sample: xike.xikeos.xikeos
 """
 
 from ansible_collections.ansible.netcommon.plugins.connection.network_cli import Connection as NetworkCliConnection
 
 
 class Connection(NetworkCliConnection):
-    """Xike switch SSH connection using netmiko raisecom backend."""
+    """Legacy network_cli compatibility wrapper for Xike OS."""
 
     transport = 'network_cli'
-    # The device_type for netmiko - maps to raisecom ROAP CLI style
-    DEFAULT_NETWORK_OS = 'xike.xikeos'
+    # Prefer ansible_network_os=xike.xikeos.xikeos with ansible.netcommon.network_cli.
+    DEFAULT_NETWORK_OS = 'xike.xikeos.xikeos'
 
     def __init__(self, *args, **kwargs):
         super(Connection, self).__init__(*args, **kwargs)

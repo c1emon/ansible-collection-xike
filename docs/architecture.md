@@ -101,8 +101,8 @@ The Ansible `network_cli` connection establishes SSH connectivity and loads this
 
 ```
 ┌──────────────┐    ┌──────────────────┐    ┌──────────┐    ┌──────────────┐
-│   Ansible    │───►│ Connection Plugin │───►│  Netmiko │───►│  Xike Switch │
-│   Module     │    │ cliconf/terminal │    │network_cli│   │              │
+│   Ansible    │───►│ cliconf/terminal │───►│network_cli│───►│  Xike Switch │
+│   Module     │    │ platform plugins │    │ SSH       │    │              │
 └──────────────┘    └──────────────────┘    └──────────┘    └──────────────┘
        │                    │                    │                  │
        │                    │                    │                  │
@@ -155,8 +155,8 @@ Each resource module follows a consistent lifecycle:
 │         │                                                                     │
 │         ▼                                                                     │
 │  ┌─────────────┐                                                             │
-│  │ 4. Push     │  Send commands to device via connection plugin              │
-│  │    Commands │  Execute via Netmiko SSH session                            │
+│  │ 4. Push     │  Send commands to device via cliconf                        │
+│  │    Commands │  Execute via network_cli SSH session                        │
 │  └──────┬──────┘                                                             │
 │         │                                                                     │
 │         ▼                                                                     │
@@ -366,7 +366,8 @@ This allows modules to use logical names while the actual CLI commands are defin
 | Component | Requirement | Purpose |
 |-----------|-------------|---------|
 | **Ansible** | >= 2.15 | Core automation engine |
-| **Netmiko** | >= 4.7.0 | SSH communication with `raisecom` device type |
+| **ansible.netcommon** | >= 5.0 | `network_cli`, terminal, and cliconf support |
+| **Netmiko** | optional | Reference for Raisecom-like CLI behavior only |
 | **Python** | >= 3.10 | Runtime dependency |
 
 ## Directory Structure
@@ -376,8 +377,10 @@ xike.xikeos/
 ├── galaxy.yml                    # Collection metadata
 ├── README.md                     # Documentation
 ├── plugins/
-│   ├── connection/
-│   │   └── xikeos.py            # SSH connection plugin
+│   ├── terminal/
+│   │   └── xikeos.py            # Prompt, paging, error handling
+│   ├── cliconf/
+│   │   └── xikeos.py            # Command/config API over network_cli
 │   ├── modules/
 │   │   ├── xikeos_interfaces.py
 │   │   ├── xikeos_l2_interfaces.py
