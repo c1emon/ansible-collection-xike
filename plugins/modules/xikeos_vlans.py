@@ -87,6 +87,7 @@ commands:
 """
 
 from ansible.module_utils.basic import AnsibleModule
+from ansible.module_utils.common.text.converters import to_text
 from ansible_collections.xike.xikeos.plugins.module_utils.facts.vlans import parse_vlan_brief
 from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config, run_commands
 
@@ -180,8 +181,13 @@ def get_commands(config, state, current=None):
 
 
 def gather_vlans(module):
-    stdout = run_commands(module, ["show vlan brief"], check_rc=True)
-    return [_normalize_vlan(vlan) for vlan in parse_vlan_brief(stdout[0] if stdout else "")]
+    try:
+        stdout = run_commands(module, ["show vlan brief"], check_rc=True)
+    except Exception as exc:
+        module.fail_json(msg="failed to gather VLAN state with 'show vlan brief': %s" % to_text(exc))
+        return []
+    output = to_text(stdout[0] if stdout else "", errors="surrogate_or_strict")
+    return [_normalize_vlan(vlan) for vlan in parse_vlan_brief(output)]
 
 
 def build_after_state(before, desired, state):

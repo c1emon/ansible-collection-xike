@@ -10,7 +10,7 @@ from ansible_collections.ansible.netcommon.plugins.plugin_utils.terminal_base im
 
 class TerminalModule(TerminalBase):
     terminal_stdout_re = [
-        re.compile(rb"[\r\n]?[A-Za-z0-9_.:/-]+(?:\((?:config|config-[^)]+|vlan|if|interface)[^)]*\)){0,3}[>#]\s?$"),
+        re.compile(rb"[\r\n]?[A-Za-z0-9_.:/-]+(?:\([^)]+\)){0,3}[>#]\s?$"),
     ]
 
     terminal_stderr_re = [

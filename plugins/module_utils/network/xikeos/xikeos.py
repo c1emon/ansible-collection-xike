@@ -34,19 +34,19 @@ def run_commands(module, commands, check_rc=True):
         module.fail_json(msg=to_text(exc), commands=commands)
 
 
-def get_config(module, flags=None):
+def get_config(module, source="running", flags=None, format=None):
     connection = get_connection(module)
     try:
-        return to_text(connection.get_config(flags=flags), errors="surrogate_or_strict")
+        return to_text(connection.get_config(source=source, flags=flags, format=format), errors="surrogate_or_strict")
     except ConnectionError as exc:
         module.fail_json(msg=to_text(exc))
+        return ""
 
 
 def load_config(module, commands):
     connection = get_connection(module)
     try:
         return connection.edit_config(candidate=commands)
-    except TypeError:
-        return connection.edit_config(commands)
     except ConnectionError as exc:
         module.fail_json(msg=to_text(exc), commands=commands)
+        return None

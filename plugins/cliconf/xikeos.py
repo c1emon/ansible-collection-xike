@@ -71,6 +71,8 @@ class Cliconf(CliconfBase):
         version = re.search(r"(?:Version|Software version)\s*[: ]\s*([^\s,]+)", output, re.I)
         model = re.search(r"(?:Model|Device model)\s*[: ]\s*(.+)$", output, re.I | re.M)
         hostname = re.search(r"^\s*(\S+)\s+uptime", output, re.I | re.M)
+        if not hostname:
+            hostname = re.search(r"(?:Hostname|System name)\s*[: ]\s*(\S+)", output, re.I)
         if version:
             info["network_os_version"] = version.group(1)
         if model:

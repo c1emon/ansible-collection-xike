@@ -123,12 +123,11 @@ cd xike-xikeos
 python3 -m venv venv
 source venv/bin/activate
 
-# Install dependencies
-pip install -r requirements.txt  # or:
-pip install "ansible>=2.15" pytest ansible-lint
+# Install project and development dependencies
+uv sync --group dev
 
 # Run tests
-pytest tests/
+uv run pytest -q tests/unit
 ```
 
 ## Quick Start

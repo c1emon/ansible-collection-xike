@@ -210,7 +210,7 @@ COMMAND_MAP = {
 #### 5. Test Thoroughly
 ```bash
 # Run existing tests
-pytest tests/
+uv run pytest -q tests/unit
 
 # Test with new firmware
 ansible-playbook test_playbook.yml -i inventory.yml
@@ -433,10 +433,10 @@ cd xike-xikeos
 # Create virtual environment
 python3 -m venv venv
 source venv/bin/activate
-pip install -r requirements.txt
+uv sync --group dev
 
 # Run tests
-pytest tests/
+uv run pytest -q tests/unit
 
 # Submit pull request
 ```

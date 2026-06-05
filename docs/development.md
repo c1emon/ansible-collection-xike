@@ -18,7 +18,8 @@ Guide for developers contributing to the `xike.xikeos` Ansible Collection.
 xike.xikeos/
 ├── galaxy.yml                    # Collection metadata
 ├── README.md                     # Main documentation
-├── requirements.txt              # Python dependencies
+├── pyproject.toml                # Python project metadata and dependencies
+├── uv.lock                       # Locked Python dependency graph
 ├── plugins/
 │   ├── __init__.py
 │   ├── terminal/
@@ -346,10 +347,10 @@ class TestGetCommands:
 
 ```bash
 # Run unit tests
-pytest tests/unit/test_xikeos_<feature>.py -v
+uv run pytest tests/unit/test_xikeos_<feature>.py -v
 
 # Run all tests
-pytest tests/ -v
+uv run pytest tests/unit -v
 
 # Test with Ansible
 ansible-playbook tests/integration/targets/xikeos_<feature>/tests/main.yml -i tests/integration/inventory.ini
@@ -559,13 +560,13 @@ Unit tests validate individual functions without device access:
 
 ```bash
 # Run all unit tests
-pytest tests/unit/ -v
+uv run pytest tests/unit/ -v
 
 # Run specific test file
-pytest tests/unit/test_xikeos_vlans.py -v
+uv run pytest tests/unit/test_xikeos_vlans.py -v
 
 # Run with coverage
-pytest tests/unit/ --cov=plugins/modules --cov-report=html
+uv run pytest tests/unit/ --cov=plugins/modules --cov-report=html
 ```
 
 ### Integration Tests
@@ -625,7 +626,7 @@ ansible-playbook test_playbook.yml -i inventory.yml -vvv
 
 Before submitting a pull request:
 
-- [ ] Unit tests pass: `pytest tests/unit/ -v`
+- [ ] Unit tests pass: `uv run pytest tests/unit/ -v`
 - [ ] No syntax errors: `python -m py_compile plugins/modules/xikeos_<feature>.py`
 - [ ] Documentation is complete (DOCUMENTATION, EXAMPLES, RETURN)
 - [ ] Module supports check mode

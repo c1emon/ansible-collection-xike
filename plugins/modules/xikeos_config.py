@@ -12,7 +12,7 @@ short_description: Manage Xike switch configuration
 version_added: "0.1.0"
 description:
   - Push configuration lines to Xike switches.
-  - Supports line-by-line config, save, and diff.
+  - Supports line-by-line config, explicit save, and check mode.
 options:
   lines:
     description: List of configuration commands
@@ -23,11 +23,15 @@ options:
     type: bool
     default: false
   diff:
-    description: Show diff before applying
+    description:
+      - Reserved for future diff support.
+      - Currently unsupported; setting this option to C(true) fails the module.
     type: bool
-    default: true
+    default: false
   backup:
-    description: Backup current config before changes
+    description:
+      - Reserved for future backup support.
+      - Currently unsupported; setting this option to C(true) fails the module.
     type: bool
     default: false
 author: Andy
@@ -56,7 +60,7 @@ def main():
         argument_spec=dict(
             lines=dict(type='list', elements='str'),
             save=dict(type='bool', default=False),
-            diff=dict(type='bool', default=True),
+            diff=dict(type='bool', default=False),
             backup=dict(type='bool', default=False),
         ),
         supports_check_mode=True,
@@ -64,6 +68,13 @@ def main():
 
     lines = module.params.get('lines', [])
     save = module.params.get('save', False)
+    diff = module.params.get('diff', False)
+    backup = module.params.get('backup', False)
+
+    if diff:
+        module.fail_json(msg='diff is not supported by xikeos_config yet')
+    if backup:
+        module.fail_json(msg='backup is not supported by xikeos_config yet')
 
     if not lines and not save:
         module.exit_json(changed=False, commands=[], saved=False, msg='No lines to configure')

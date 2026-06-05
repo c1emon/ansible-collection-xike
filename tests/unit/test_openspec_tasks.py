@@ -16,6 +16,7 @@ from ansible_collections.xike.xikeos.plugins.modules import (
     xikeos_config as config_module,
     xikeos_vlans as vlans_module,
 )
+from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos import xikeos as network_utils
 from ansible_collections.xike.xikeos.plugins.terminal.xikeos import TerminalModule
 
 
@@ -34,8 +35,10 @@ def _fake_module(params, check_mode=False):
 
 def test_terminal_regexes_and_open_shell_calls():
     assert TerminalModule.terminal_stdout_re[0].search(b"\nrouter(config-if)#")
+    assert TerminalModule.terminal_stdout_re[0].search(b"\nrouter(config-router-af)#")
     assert TerminalModule.terminal_stderr_re[1].search(b"Invalid input detected")
     assert TerminalModule.terminal_config_prompt.fullmatch("router(config-if)#")
+    assert TerminalModule.terminal_config_prompt.fullmatch("router(config-router-af)#")
 
     term = TerminalModule.__new__(TerminalModule)
     term._exec_cli_command = Mock()
@@ -52,7 +55,7 @@ def test_cliconf_get_config_edit_config_and_capabilities():
     plugin = Cliconf.__new__(Cliconf)
     plugin.send_command = Mock(side_effect=["running-config", "term", "vlan", "name", "end"])
 
-    assert plugin.get_config(source="startup", flags=["all", "brief"]) == "running-config"
+    assert plugin.get_config(source="startup", flags=["all", "brief"], format="text") == "running-config"
     plugin.send_command.assert_called_with("show startup-config all brief")
 
     plugin.send_command.reset_mock(side_effect=True)
@@ -86,6 +89,45 @@ def test_cliconf_get_config_edit_config_and_capabilities():
         capabilities = json.loads(plugin.get_capabilities())
 
     assert capabilities["rpc"] == ["get_config", "edit_config", "run_commands"]
+
+
+@pytest.mark.parametrize(
+    "version_line, expected_hostname",
+    [("Hostname: core-switch", "core-switch"), ("System name: edge-switch", "edge-switch")],
+)
+def test_cliconf_get_device_info_parses_hostname_variants(version_line, expected_hostname):
+    plugin = Cliconf.__new__(Cliconf)
+    plugin.get = Mock(return_value="\n".join([version_line, "Software version: 1.2.3", "Model: X1000"]))
+
+    info = plugin.get_device_info()
+
+    assert info["network_os"] == "xikeos"
+    assert info["network_os_version"] == "1.2.3"
+    assert info["network_os_model"] == "X1000"
+    assert info["network_os_hostname"] == expected_hostname
+
+
+def test_network_load_config_uses_candidate_and_propagates_typeerror():
+    module = Mock()
+    connection = Mock()
+    connection.edit_config.side_effect = [TypeError("candidate is required"), {"response": ["ok"]}]
+
+    with patch.object(network_utils, "get_connection", return_value=connection):
+        with pytest.raises(TypeError, match="candidate is required"):
+            network_utils.load_config(module, ["vlan 10"])
+
+    connection.edit_config.assert_called_once_with(candidate=["vlan 10"])
+
+
+def test_network_get_config_uses_flags_and_returns_text():
+    module = Mock()
+    connection = Mock()
+    connection.get_config.return_value = b"running-config"
+
+    with patch.object(network_utils, "get_connection", return_value=connection):
+        assert network_utils.get_config(module, flags=["all", "brief"]) == "running-config"
+
+    connection.get_config.assert_called_once_with(source="running", flags=["all", "brief"], format=None)
 
 
 def test_xikeos_command_stdout_and_lines():
@@ -134,6 +176,21 @@ def test_xikeos_config_check_mode_and_save_flow():
     }
     load_mock.assert_called_once_with(module, ["vlan 10"])
     run_mock.assert_called_once_with(module, [config_module.SAVE_COMMAND], check_rc=True)
+
+
+def test_xikeos_config_warns_or_rejects_unsupported_diff_and_backup():
+    module = _fake_module({"lines": ["vlan 10"], "diff": True, "backup": True})
+    module.warn = Mock()
+    module.fail_json.side_effect = ExitJson
+
+    with patch.object(config_module, "AnsibleModule", return_value=module), patch.object(
+        config_module, "load_config", return_value={"response": ["ok"]}
+    ) as load_mock:
+        with pytest.raises(ExitJson):
+            config_module.main()
+
+    assert module.warn.called or module.fail_json.called
+    load_mock.assert_not_called()
 
 
 def test_xikeos_vlans_normalize_and_lifecycle():
@@ -195,3 +252,26 @@ def test_xikeos_vlans_normalize_and_lifecycle():
     assert check_mode.exit_json.call_args.kwargs["changed"] is True
     assert check_mode.exit_json.call_args.kwargs["commands"] == ["vlan 300", "description NEW", "exit"]
     load_mock.assert_not_called()
+
+
+def test_xikeos_vlans_gather_vlans_decodes_bytes_and_reports_failures():
+    module = Mock()
+    module.fail_json.side_effect = RuntimeError("gather failed")
+
+    def _parse_vlan_brief(output):
+        assert isinstance(output, str)
+        return [{"vlan_id": 10, "name": "DATA", "state": "active", "ports": []}]
+
+    with patch.object(vlans_module, "run_commands", return_value=[b"VLAN Name\n10  DATA  active"]), patch.object(
+        vlans_module, "parse_vlan_brief", side_effect=_parse_vlan_brief
+    ):
+        assert vlans_module.gather_vlans(module) == [{"vlan_id": 10, "name": "DATA", "state": "active", "ports": []}]
+
+    failing = Mock()
+    failing.fail_json.side_effect = RuntimeError("gather failed")
+    with patch.object(vlans_module, "run_commands", side_effect=Exception("connection lost")):
+        with pytest.raises(RuntimeError, match="gather failed"):
+            vlans_module.gather_vlans(failing)
+
+    assert "show vlan brief" in failing.fail_json.call_args.kwargs["msg"]
+    assert "connection lost" in failing.fail_json.call_args.kwargs["msg"]
