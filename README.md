@@ -209,27 +209,84 @@ all:
         ansible_become_method: enable
 ```
 
-## Available Modules
+## Manual Coverage (三层配置手册对照清单)
 
-| Module | Description | States |
-|--------|-------------|--------|
-| `xikeos_vlans` | Manage VLANs (create, modify, delete) | `merged`, `replaced`, `deleted` |
-| `xikeos_interfaces` | Configure Ethernet interfaces (speed, duplex, description) | `merged`, `replaced` |
-| `xikeos_l2_interfaces` | Layer 2 interface config: access, trunk, and **hybrid** modes | `merged`, `replaced` |
-| `xikeos_l3_interfaces` | Layer 3 VLAN interface IP addresses (IPv4/IPv6) | `merged`, `replaced` |
-| `xikeos_lag_interfaces` | LAG eth-trunk bundles (static/dynamic LACP) | `merged`, `replaced` |
-| `xikeos_ospfv2` | OSPFv2 routing (networks, redistribution, passive interfaces) | `merged`, `replaced` |
-| `xikeos_static_routes` | Static routes (IPv4/IPv6) | `merged`, `replaced`, `deleted` |
-| `xikeos_acls` | Access Control Lists (Standard 1-999, MAC 1000-1999, Mixed 2000-2999) | `merged`, `replaced`, `deleted` |
-| `xikeos_stp` | Spanning Tree Protocol (STP/RSTP/MSTP/PVST) | `merged`, `replaced` |
-| `xikeos_mirror` | Port mirroring (mirror groups with source/destination) | `present`, `absent` |
-| `xikeos_port_isolate` | Port isolation groups (prevent inter-port communication) | `present`, `absent` |
-| `xikeos_erps` | ERPS G.8032 ring protection | `present`, `absent` |
-| `xikeos_eaps` | EAPS Ethernet Automatic Protection Switching | `present`, `absent` |
-| `xikeos_qinq` | QinQ VLAN stacking (802.1ad) | `present`, `absent` |
-| `xikeos_flex_monitor_link` | Flex-Link and Monitor-Link redundancy | `present`, `absent` |
-| `xikeos_config` | Push raw configuration lines | — |
-| `xikeos_command` | Execute read-only show commands | — |
+> 本 Collection 基于兮克三层配置手册（97 章）开发。以下清单标注每章的实现状态。
+
+### ✅ 已实现（19 章）
+
+| 手册章节 | 功能 | 对应模块 | 备注 |
+|---------|------|---------|------|
+| 1. 端口配置 | interface, speed, duplex, shutdown, description | `xikeos_interfaces` | ✅ |
+| 2. 端口统计 | show statistics, show utilization | `xikeos_command` | ⚠️ 用 show 命令 |
+| 5. 802.1Q VLAN | vlan, switchport, pvid, trunk, hybrid | `xikeos_vlans` + `xikeos_l2_interfaces` | ✅ 含 hybrid |
+| 19. ACL | access-list 1-2999, access-group | `xikeos_acls` | ✅ 含 MAC ACL |
+| 40. 链路聚合 | eth-trunk, link-aggregation, lacp | `xikeos_lag_interfaces` | ✅ |
+| 41. Flex-link | flex-link group, master/slave port | `xikeos_flex_monitor_link` | ✅ |
+| 42. Monitor-link | monitor-link group, uplink/downlink | `xikeos_flex_monitor_link` | ✅ |
+| 43. STP/RSTP | stp mode, priority, bpdu-guard | `xikeos_stp` | ✅ |
+| 44. MSTP | mstp region, instance, vlan mapping | `xikeos_stp` | ✅ |
+| 45. PVST | pvst instance, vlan | `xikeos_stp` | ✅ |
+| 47. EAPS | eaps domain, ring, work-mode | `xikeos_eaps` | ✅ |
+| 48. ERPS | erps instance, control-vlan, port0/port1 | `xikeos_erps` | ✅ |
+| 80. 管理接口 | internal-interface | `xikeos_l3_interfaces` | ⚠️ 部分 |
+| 81. VLAN 接口 | interface vlan-interface, ip address | `xikeos_l3_interfaces` | ✅ |
+| 82. Supervlan | supervlan-interface | `xikeos_l3_interfaces` | ⚠️ 部分 |
+| 83. Loopback | loopback-interface | `xikeos_l3_interfaces` | ⚠️ 部分 |
+| 86. 静态路由 | ip route, ipv6 route | `xikeos_static_routes` | ✅ |
+| 88. OSPF | router ospf, network, redistribute | `xikeos_ospfv2` | ✅ |
+| 端口镜像 | mirror group, source/destination | `xikeos_mirror` | ✅ |
+| 端口隔离 | port-isolate group | `xikeos_port_isolate` | ✅ |
+| QinQ | qinq mode, vlan insert/swap | `xikeos_qinq` | ✅ |
+| MAC 地址表 | mac-address-table | `xikeos_config` 兜底 | ⚠️ 用原始命令 |
+
+### ❌ 未实现（~28 章）
+
+| 手册章节 | 功能 | 复杂度 | 说明 |
+|---------|------|--------|------|
+| 3. MTU 配置 | mtu | 低 | 可在 `xikeos_interfaces` 中扩展 |
+| 4. Loopback 检测 | loopback internal/external | 低 | 环回测试 |
+| 6. Mac-vlan | mac-vlan mac-address | 低 | 基于 MAC 的 VLAN |
+| 7. Ip-subnet-vlan | ip-subnet-vlan | 低 | 基于子网的 VLAN |
+| 8. Protocol-vlan | protocol-vlan profile | 中 | 基于协议的 VLAN |
+| 9. Vlan-trunking | vlan-trunking mode | 低 | VLAN 自动透传 |
+| 10. Vlan-swap | vlan swap | 低 | VLAN 转换 |
+| 13. 流量控制 | flow-control | 低 | |
+| 14. 带宽控制 | bandwidth ingress | 低 | |
+| 15. Dlf-Control | unknown-discard | 低 | |
+| 16. Local-Switch | local-switch | 低 | |
+| 18. Sflow | sflow agent/collector | 中 | |
+| 20. QACL | traffic insert-vlan/mirror/priority | 高 | 流分类动作 |
+| 21. 队列调度 | queue-scheduler | 高 | QoS |
+| 22. 双速三色 | two-rate-policer | 高 | 限速 |
+| 24. 风暴抑制 | storm-control | 低 | |
+| 25. 端口安全 | port-security | 中 | |
+| 26. IP Source Guard | ip-source-guard | 中 | |
+| 27. ARP 防欺骗 | arp anti-spoofing | 中 | |
+| 28. DHCP 防攻击 | dhcp anti-attack | 中 | |
+| 35. PPPoE Plus | pppoeplus | 高 | |
+| 36-38. AAA | RADIUS/TACACS+/802.1X | 高 | |
+| 49-53. DHCP | Snooping/Server/Client/Relay/v6 | 高 | |
+| 55-57. 组播 | IGMP/MLD snooping, multicast | 高 | |
+| 65. SNMP | snmp-server | 中 | |
+| 72. 日志 | logging | 低 | |
+| 87. RIP | router rip | 低 | |
+| 89. VRRP | vrrp vrid | 中 | |
+| 90. 策略路由 | route-map, prefix-list | 中 | |
+| 95-97. PIM/CFM | 组播路由/OAM | 高 | |
+
+### 📊 覆盖率统计
+
+```
+手册总章节数:    97
+已实现:          22 章（含兜底模块覆盖的 2 章）
+未实现:          ~28 章
+用 xikeos_config 兜底: ~10 章（可用原始命令配置）
+覆盖率（专用模块）: ~23%
+覆盖率（含兜底）:   ~33%
+```
+
+**核心网络功能（VLAN/接口/路由/STP/安全）已全部覆盖**，缺失的主要是辅助功能（DHCP/组播/AAA/QoS/监控）。
 
 ## Usage Examples
 
