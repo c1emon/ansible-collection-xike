@@ -3,13 +3,14 @@ __metaclass__ = type
 
 import json
 import re
+from typing import Any, Optional
 
 from ansible.module_utils.common.text.converters import to_text
 from ansible.module_utils.common.collections import is_sequence
 from ansible_collections.ansible.netcommon.plugins.plugin_utils.cliconf_base import CliconfBase
 
 
-def _to_list(value):
+def _to_list(value: Any) -> list[Any]:
     if value is None:
         return []
     if is_sequence(value):
@@ -18,7 +19,7 @@ def _to_list(value):
 
 
 class Cliconf(CliconfBase):
-    def get(self, command=None, prompt=None, answer=None, sendonly=False, newline=True, output=None, check_all=False):
+    def get(self, command: Optional[str] = None, prompt: Any = None, answer: Any = None, sendonly: bool = False, newline: bool = True, output: Any = None, check_all: bool = False) -> str:
         return self.send_command(
             command=command,
             prompt=prompt,
@@ -28,7 +29,7 @@ class Cliconf(CliconfBase):
             check_all=check_all,
         )
 
-    def get_config(self, source="running", flags=None, format=None):
+    def get_config(self, source: str = "running", flags: Any = None, format: Optional[str] = None) -> str:
         if source not in ("running", "startup"):
             raise ValueError("fetching configuration from %s is not supported" % source)
         if format not in (None, "text"):
@@ -39,7 +40,7 @@ class Cliconf(CliconfBase):
             command = "%s %s" % (command, flag_text)
         return self.send_command(command)
 
-    def edit_config(self, candidate=None, commit=True, replace=None, diff=False, comment=None):
+    def edit_config(self, candidate: Any = None, commit: bool = True, replace: Any = None, diff: bool = False, comment: Optional[str] = None) -> str:
         if replace:
             raise ValueError("replace config is not supported on Xike OS")
 
@@ -59,9 +60,9 @@ class Cliconf(CliconfBase):
                     responses.append(self.send_command(command))
             finally:
                 self.send_command("end")
-        return {"request": requests, "response": responses}
+        return json.dumps({"diff": "", "request": requests, "response": responses})
 
-    def get_device_info(self):
+    def get_device_info(self) -> dict[str, Any]:
         info = {"network_os": "xikeos"}
         try:
             output = to_text(self.get("show version"), errors="surrogate_or_strict")
@@ -81,7 +82,7 @@ class Cliconf(CliconfBase):
             info["network_os_hostname"] = hostname.group(1)
         return info
 
-    def get_capabilities(self):
+    def get_capabilities(self) -> str:
         result = super(Cliconf, self).get_capabilities()
         if isinstance(result, str):
             result = json.loads(result)

@@ -60,8 +60,8 @@ def test_cliconf_get_config_edit_config_and_capabilities():
 
     plugin.send_command.reset_mock(side_effect=True)
     plugin.send_command.side_effect = ["term", "vlan", "name", "end"]
-    result = plugin.edit_config(candidate=[{"command": "vlan 100"}, "! ignored", "end", "name DATA"])
-    assert result == {"request": ["vlan 100", "name DATA"], "response": ["vlan", "name"]}
+    result = json.loads(plugin.edit_config(candidate=[{"command": "vlan 100"}, "! ignored", "end", "name DATA"]))
+    assert result == {"diff": "", "request": ["vlan 100", "name DATA"], "response": ["vlan", "name"]}
     assert plugin.send_command.call_args_list == [
         call("configure terminal"),
         call("vlan 100"),
@@ -117,6 +117,15 @@ def test_network_load_config_uses_candidate_and_propagates_typeerror():
             network_utils.load_config(module, ["vlan 10"])
 
     connection.edit_config.assert_called_once_with(candidate=["vlan 10"])
+
+
+def test_network_load_config_decodes_json_string_response():
+    module = Mock()
+    connection = Mock()
+    connection.edit_config.return_value = json.dumps({"response": ["ok"], "request": ["vlan 10"]})
+
+    with patch.object(network_utils, "get_connection", return_value=connection):
+        assert network_utils.load_config(module, ["vlan 10"]) == {"response": ["ok"], "request": ["vlan 10"]}
 
 
 def test_network_get_config_uses_flags_and_returns_text():

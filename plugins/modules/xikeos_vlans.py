@@ -6,6 +6,8 @@
 from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
+from typing import Any, Optional
+
 DOCUMENTATION = """
 module: xikeos_vlans
 short_description: Manage VLANs on Xike OS switches
@@ -92,7 +94,7 @@ from ansible_collections.xike.xikeos.plugins.module_utils.facts.vlans import par
 from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config, run_commands
 
 
-def vlan_id_range(vlan_ids):
+def vlan_id_range(vlan_ids: list[int]) -> str:
     """Convert a list of VLAN IDs to a range string (e.g., 100-200, 300)."""
     if not vlan_ids:
         return ""
@@ -120,7 +122,7 @@ def vlan_id_range(vlan_ids):
     return ",".join(ranges)
 
 
-def _normalize_vlan(vlan):
+def _normalize_vlan(vlan: dict[str, Any]) -> dict[str, Any]:
     normalized = {
         "vlan_id": int(vlan["vlan_id"]),
         "name": vlan.get("name") or "",
@@ -131,11 +133,11 @@ def _normalize_vlan(vlan):
     return normalized
 
 
-def _index_vlans(vlans):
+def _index_vlans(vlans: list[dict[str, Any]]) -> dict[int, dict[str, Any]]:
     return {item["vlan_id"]: _normalize_vlan(item) for item in vlans}
 
 
-def get_commands(config, state, current=None):
+def get_commands(config: list[dict[str, Any]], state: str, current: Optional[list[dict[str, Any]]] = None) -> list[str]:
     """Generate minimal CLI commands from VLAN configuration and current state."""
     commands = []
     current_by_id = _index_vlans(current or [])
@@ -180,7 +182,7 @@ def get_commands(config, state, current=None):
     return commands
 
 
-def gather_vlans(module):
+def gather_vlans(module: Any) -> list[dict[str, Any]]:
     try:
         stdout = run_commands(module, ["show vlan brief"], check_rc=True)
     except Exception as exc:
@@ -190,7 +192,7 @@ def gather_vlans(module):
     return [_normalize_vlan(vlan) for vlan in parse_vlan_brief(output)]
 
 
-def build_after_state(before, desired, state):
+def build_after_state(before: list[dict[str, Any]], desired: list[dict[str, Any]], state: str) -> list[dict[str, Any]]:
     after = _index_vlans(before)
     if state in ("merged", "replaced"):
         if state == "replaced":
@@ -205,7 +207,7 @@ def build_after_state(before, desired, state):
     return [after[vlan_id] for vlan_id in sorted(after)]
 
 
-def main():
+def main() -> None:
     """Main entry point for the module."""
     module_args = dict(
         config=dict(

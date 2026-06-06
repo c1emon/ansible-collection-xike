@@ -55,7 +55,7 @@ from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.xikeos 
 SAVE_COMMAND = 'write memory'
 
 
-def main():
+def main() -> None:
     module = AnsibleModule(
         argument_spec=dict(
             lines=dict(type='list', elements='str'),

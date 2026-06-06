@@ -3,6 +3,7 @@ __metaclass__ = type
 
 import re
 import json
+from typing import Any
 
 from ansible.errors import AnsibleConnectionFailure
 from ansible_collections.ansible.netcommon.plugins.plugin_utils.terminal_base import TerminalBase
@@ -26,7 +27,7 @@ class TerminalModule(TerminalBase):
 
     terminal_config_prompt = re.compile(r"^.+\(config[^)]*\)#$")
 
-    def on_open_shell(self):
+    def on_open_shell(self) -> None:
         for command in (b"terminal length 0", b"terminal width 512"):
             try:
                 self._exec_cli_command(command)
@@ -34,7 +35,7 @@ class TerminalModule(TerminalBase):
                 if command == b"terminal length 0":
                     raise
 
-    def on_become(self, passwd=None):
+    def on_become(self, passwd: Any = None) -> None:
         prompt = self._get_prompt()
         if prompt and prompt.strip().endswith(b"#"):
             return
@@ -43,7 +44,7 @@ class TerminalModule(TerminalBase):
             cmd = json.dumps({"command": "enable", "prompt": "[Pp]assword: ?$", "answer": passwd})
         self._exec_cli_command(cmd)
 
-    def on_unbecome(self):
+    def on_unbecome(self) -> None:
         prompt = self._get_prompt()
         if prompt and prompt.strip().endswith(b"#"):
             self._exec_cli_command(b"disable")

@@ -39,11 +39,11 @@ from ansible.module_utils.common.text.converters import to_text
 from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.xikeos import run_commands
 
 
-def _split_lines(output):
+def _split_lines(output) -> list[str]:
     return to_text(output, errors='surrogate_or_strict').splitlines()
 
 
-def main():
+def main() -> None:
     module = AnsibleModule(
         argument_spec=dict(
             commands=dict(type='list', elements='str', required=True),
