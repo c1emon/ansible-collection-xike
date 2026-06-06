@@ -8,7 +8,7 @@
       xike.xikeos.xikeos_command:
         commands:
           - show version
-          - show vlan brief
+          - show vlan
       register: xikeos_show_output
 
     - name: Display version output
@@ -18,3 +18,12 @@
     - name: Display VLAN command output
       ansible.builtin.debug:
         var: xikeos_show_output.stdout_lines[1]
+
+    - name: Gather structured VLAN state
+      xike.xikeos.xikeos_vlans:
+        state: gathered
+      register: xikeos_vlan_state
+
+    - name: Display structured VLAN state
+      ansible.builtin.debug:
+        var: xikeos_vlan_state.gathered
