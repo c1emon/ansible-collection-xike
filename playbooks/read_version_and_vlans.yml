@@ -1,0 +1,20 @@
+---
+- name: Read Xike OS version and VLAN information
+  hosts: xike_switches
+  gather_facts: false
+
+  tasks:
+    - name: Read version and VLAN command output
+      xike.xikeos.xikeos_command:
+        commands:
+          - show version
+          - show vlan brief
+      register: xikeos_show_output
+
+    - name: Display version output
+      ansible.builtin.debug:
+        var: xikeos_show_output.stdout_lines[0]
+
+    - name: Display VLAN command output
+      ansible.builtin.debug:
+        var: xikeos_show_output.stdout_lines[1]
