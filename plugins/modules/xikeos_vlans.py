@@ -42,8 +42,9 @@ options:
       - C(merged) - Creates or updates VLANs as specified.
       - C(replaced) - Replaces existing VLAN configuration with specified config.
       - C(deleted) - Deletes VLANs specified in config.
+      - C(gathered) - Gathers VLAN state without changing the device.
     type: str
-    choices: ['merged', 'replaced', 'deleted']
+    choices: ['merged', 'replaced', 'deleted', 'gathered']
     default: merged
 author: Andy
 """
@@ -74,6 +75,10 @@ EXAMPLES = """
       - vlan_id: 100
       - vlan_id: 200
     state: deleted
+
+- name: Gather VLANs
+  xike.xikeos.xikeos_vlans:
+    state: gathered
 """
 
 RETURN = """
@@ -86,11 +91,16 @@ commands:
     - description DATA
     - vlan 200
     - description VOICE
+gathered:
+  description: VLAN state gathered from the device when I(state=gathered)
+  returned: when state is gathered
+  type: list
+  elements: dict
 """
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.common.text.converters import to_text
-from ansible_collections.xike.xikeos.plugins.module_utils.facts.vlans import parse_vlan_brief
+from ansible_collections.xike.xikeos.plugins.module_utils.facts.vlans import parse_vlan
 from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config, run_commands
 
 
@@ -130,6 +140,10 @@ def _normalize_vlan(vlan: dict[str, Any]) -> dict[str, Any]:
     }
     if "ports" in vlan:
         normalized["ports"] = list(vlan.get("ports") or [])
+    if "type" in vlan:
+        normalized["type"] = vlan.get("type")
+    if "media" in vlan:
+        normalized["media"] = vlan.get("media")
     return normalized
 
 
@@ -184,12 +198,12 @@ def get_commands(config: list[dict[str, Any]], state: str, current: Optional[lis
 
 def gather_vlans(module: Any) -> list[dict[str, Any]]:
     try:
-        stdout = run_commands(module, ["show vlan brief"], check_rc=True)
+        stdout = run_commands(module, ["show vlan"], check_rc=True)
     except Exception as exc:
-        module.fail_json(msg="failed to gather VLAN state with 'show vlan brief': %s" % to_text(exc))
+        module.fail_json(msg="failed to gather VLAN state with 'show vlan': %s" % to_text(exc))
         return []
     output = to_text(stdout[0] if stdout else "", errors="surrogate_or_strict")
-    return [_normalize_vlan(vlan) for vlan in parse_vlan_brief(output)]
+    return [_normalize_vlan(vlan) for vlan in parse_vlan(output)]
 
 
 def build_after_state(before: list[dict[str, Any]], desired: list[dict[str, Any]], state: str) -> list[dict[str, Any]]:
@@ -232,7 +246,7 @@ def main() -> None:
         ),
         state=dict(
             type="str",
-            choices=["merged", "replaced", "deleted"],
+            choices=["merged", "replaced", "deleted", "gathered"],
             default="merged",
         ),
     )
@@ -254,6 +268,9 @@ def main() -> None:
 
     before = gather_vlans(module)
     result["before"] = before
+
+    if state == "gathered":
+        module.exit_json(changed=False, gathered=before)
 
     if not config:
         result["after"] = before
