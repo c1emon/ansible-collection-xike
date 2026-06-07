@@ -76,6 +76,7 @@ The `xike.xikeos` collection provides Ansible modules for automating **Xike (兮
 |-----------|-------------|-------|
 | **Ansible** | >= 2.15 | Core automation engine |
 | **ansible.netcommon** | >= 5.0 | Standard `network_cli`, terminal, and cliconf plugins |
+| **ttp** | >= 0.9.5 | Runtime parser for bundled facts templates |
 | **Netmiko** | optional | Reference only for Raisecom-like CLI behavior |
 | **Python** | >= 3.10 | Runtime dependency |
 
@@ -84,7 +85,13 @@ The `xike.xikeos` collection provides Ansible modules for automating **Xike (兮
 ```bash
 # Install Python dependencies
 ansible-galaxy collection install ansible.netcommon
+pip install "ttp>=0.9.5"
 ```
+
+Ansible collection installation does not automatically install Python package
+dependencies. Install `ttp` in the Python environment used by the Ansible
+control node before gathering VLAN facts or using `xikeos_vlans` current-state
+diffing.
 
 ## Installation
 

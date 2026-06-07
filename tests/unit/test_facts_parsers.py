@@ -7,8 +7,12 @@ import pytest
 
 # Import parsers directly (no device connection needed)
 from ansible_collections.xike.xikeos.plugins.module_utils.facts.vlans import (
+    VLAN_BRIEF_TEMPLATE,
     parse_vlan_brief,
     parse_vlan_line,
+)
+from ansible_collections.xike.xikeos.plugins.module_utils.facts.ttp_parser import (
+    parse_ttp_template,
 )
 from ansible_collections.xike.xikeos.plugins.module_utils.facts.interfaces import (
     parse_interface_brief,
@@ -52,6 +56,7 @@ VLAN Name                             Status    Ports
         vlan = result[0]
         assert vlan["vlan_id"] == 1
         assert vlan["name"] == "default"
+        assert vlan["state"] == "active"
         assert vlan["status"] == "active"
         assert vlan["ports"] == ["e0/0/1", "e0/0/2", "e0/0/3"]
 
@@ -84,7 +89,38 @@ VLAN Name                             Status    Ports
         assert len(result) == 1
         assert result[0]["vlan_id"] == 500
         assert result[0]["name"] == "EMPTY"
+        assert result[0]["state"] == "active"
+        assert result[0]["status"] == "active"
         assert result[0]["ports"] == []
+
+    def test_vlan_brief_parser_uses_bundled_ttp_template(self):
+        rows = parse_ttp_template(self.SAMPLE_OUTPUT, VLAN_BRIEF_TEMPLATE, result_key="vlans")
+        assert rows == [
+            {"row": "1    default                          active    e0/0/1, e0/0/2, e0/0/3"},
+            {"row": "100  DATA                             active    e0/0/10"},
+            {"row": "200  VOICE                            active    e0/0/20"},
+        ]
+
+    def test_vlan_brief_parser_preserves_names_with_spaces(self):
+        output = """\
+VLAN Name                             Status    Ports
+---- -------------------------------- --------- -------------------------------
+600  Guest VLAN                       suspend
+"""
+        result = parse_vlan_brief(output)
+        assert result == [
+            {
+                "vlan_id": 600,
+                "name": "Guest VLAN",
+                "state": "suspend",
+                "status": "suspend",
+                "ports": [],
+            }
+        ]
+
+    def test_ttp_helper_missing_template_error_is_actionable(self):
+        with pytest.raises(FileNotFoundError, match="Bundled TTP template 'missing.ttp' was not found"):
+            parse_ttp_template(self.SAMPLE_OUTPUT, "missing.ttp")
 
     def test_parse_vlan_line_single(self):
         line = "100  DATA   active   e0/0/10"

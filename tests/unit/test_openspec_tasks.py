@@ -267,14 +267,14 @@ def test_xikeos_vlans_gather_vlans_decodes_bytes_and_reports_failures():
     module = Mock()
     module.fail_json.side_effect = RuntimeError("gather failed")
 
-    def _parse_vlan_brief(output):
-        assert isinstance(output, str)
-        return [{"vlan_id": 10, "name": "DATA", "state": "active", "ports": []}]
-
-    with patch.object(vlans_module, "run_commands", return_value=[b"VLAN Name\n10  DATA  active"]), patch.object(
-        vlans_module, "parse_vlan_brief", side_effect=_parse_vlan_brief
-    ):
-        assert vlans_module.gather_vlans(module) == [{"vlan_id": 10, "name": "DATA", "state": "active", "ports": []}]
+    output = b"""VLAN Name                             Status    Ports
+---- -------------------------------- --------- -------------------------------
+10   DATA                             active
+"""
+    with patch.object(vlans_module, "run_commands", return_value=[output]):
+        assert vlans_module.gather_vlans(module) == [
+            {"vlan_id": 10, "name": "DATA", "state": "active", "ports": []}
+        ]
 
     failing = Mock()
     failing.fail_json.side_effect = RuntimeError("gather failed")

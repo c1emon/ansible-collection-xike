@@ -8,9 +8,15 @@ __metaclass__ = type
 
 import re
 
+from ansible_collections.xike.xikeos.plugins.module_utils.facts.ttp_parser import (
+    parse_ttp_template,
+)
 from ansible_collections.xike.xikeos.plugins.module_utils.xikeos import (
     COMMAND_MAP,
 )
+
+
+VLAN_BRIEF_TEMPLATE = "show_vlan_brief.ttp"
 
 
 def parse_vlan_brief(output):
@@ -27,37 +33,15 @@ def parse_vlan_brief(output):
         return []
 
     vlans = []
+    rows = parse_ttp_template(output, VLAN_BRIEF_TEMPLATE, result_key="vlans")
 
-    # Split output into lines
-    lines = output.strip().split("\n")
-
-    # Find the data rows (skip header lines)
-    # Header: VLAN Name ... Status ... Ports
-    # Separator: ---- ...
-    # Data: 1    default  active  e0/0/1, e0/0/2
-
-    data_started = False
-    for line in lines:
-        stripped = line.strip()
-
-        # Skip empty lines
-        if not stripped:
+    for row in rows:
+        line = row.get("row") if isinstance(row, dict) else row
+        if not line:
             continue
-
-        # Skip header line (contains "VLAN" and "Name")
-        if stripped.upper().startswith("VLAN") and "NAME" in stripped.upper():
-            continue
-
-        # Skip separator line (starts with ----)
-        if stripped.startswith("---"):
-            data_started = True
-            continue
-
-        # Parse data line if we've passed the header
-        if data_started or re.match(r"^\d+\s", stripped):
-            vlan = parse_vlan_line(stripped)
-            if vlan:
-                vlans.append(vlan)
+        vlan = parse_vlan_line(line.strip())
+        if vlan:
+            vlans.append(vlan)
 
     return vlans
 
