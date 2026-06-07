@@ -8,6 +8,7 @@ import pytest
 # Import parsers directly (no device connection needed)
 from ansible_collections.xike.xikeos.plugins.module_utils.facts.vlans import (
     VLAN_BRIEF_TEMPLATE,
+    parse_vlan,
     parse_vlan_brief,
     parse_vlan_line,
 )
@@ -128,6 +129,60 @@ VLAN Name                             Status    Ports
         assert result is not None
         assert result["vlan_id"] == 100
         assert result["name"] == "DATA"
+
+    def test_parse_show_vlan_multiline_real_output(self):
+        output = """\
+VLAN Name         Type       Media     Ports
+---- ------------ ---------- --------- ----------------------------------------
+1    default      Static     ENET      Ethernet1/0/1       Ethernet1/0/2(T)
+                                       Ethernet1/0/3(T)    Ethernet1/0/4(T)
+10   dev          Static     ENET      Ethernet1/0/3(T)    Ethernet1/0/4(T)
+                                       Ethernet1/0/5(T)
+21   isp          Static     ENET      Ethernet1/0/2(T)    Ethernet1/0/3(T)
+"""
+        result = parse_vlan(output)
+
+        assert result == [
+            {
+                "vlan_id": 1,
+                "name": "default",
+                "type": "Static",
+                "media": "ENET",
+                "state": "active",
+                "status": "active",
+                "ports": [
+                    {"name": "Ethernet1/0/1", "tagged": False},
+                    {"name": "Ethernet1/0/2", "tagged": True},
+                    {"name": "Ethernet1/0/3", "tagged": True},
+                    {"name": "Ethernet1/0/4", "tagged": True},
+                ],
+            },
+            {
+                "vlan_id": 10,
+                "name": "dev",
+                "type": "Static",
+                "media": "ENET",
+                "state": "active",
+                "status": "active",
+                "ports": [
+                    {"name": "Ethernet1/0/3", "tagged": True},
+                    {"name": "Ethernet1/0/4", "tagged": True},
+                    {"name": "Ethernet1/0/5", "tagged": True},
+                ],
+            },
+            {
+                "vlan_id": 21,
+                "name": "isp",
+                "type": "Static",
+                "media": "ENET",
+                "state": "active",
+                "status": "active",
+                "ports": [
+                    {"name": "Ethernet1/0/2", "tagged": True},
+                    {"name": "Ethernet1/0/3", "tagged": True},
+                ],
+            },
+        ]
 
 
 # ---------------------------------------------------------------------------

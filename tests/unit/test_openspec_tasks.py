@@ -262,18 +262,39 @@ def test_xikeos_vlans_normalize_and_lifecycle():
     assert check_mode.exit_json.call_args.kwargs["commands"] == ["vlan 300", "description NEW", "exit"]
     load_mock.assert_not_called()
 
+    gathered = _fake_module({"config": None, "state": "gathered"})
+    gathered_vlans = [{"vlan_id": 10, "name": "dev", "state": "active", "ports": [{"name": "Ethernet1/0/3", "tagged": True}]}]
+    with patch.object(vlans_module, "AnsibleModule", return_value=gathered), patch.object(
+        vlans_module, "gather_vlans", return_value=gathered_vlans
+    ), patch.object(vlans_module, "load_config") as load_mock:
+        with pytest.raises(ExitJson):
+            vlans_module.main()
+
+    assert gathered.exit_json.call_args.kwargs == {"changed": False, "gathered": gathered_vlans}
+    load_mock.assert_not_called()
+
 
 def test_xikeos_vlans_gather_vlans_decodes_bytes_and_reports_failures():
     module = Mock()
     module.fail_json.side_effect = RuntimeError("gather failed")
 
-    output = b"""VLAN Name                             Status    Ports
----- -------------------------------- --------- -------------------------------
-10   DATA                             active
+    output = b"""VLAN Name         Type       Media     Ports
+---- ------------ ---------- --------- ----------------------------------------
+10   DATA         Static     ENET      Ethernet1/0/1       Ethernet1/0/2(T)
 """
     with patch.object(vlans_module, "run_commands", return_value=[output]):
         assert vlans_module.gather_vlans(module) == [
-            {"vlan_id": 10, "name": "DATA", "state": "active", "ports": []}
+            {
+                "vlan_id": 10,
+                "name": "DATA",
+                "state": "active",
+                "ports": [
+                    {"name": "Ethernet1/0/1", "tagged": False},
+                    {"name": "Ethernet1/0/2", "tagged": True},
+                ],
+                "type": "Static",
+                "media": "ENET",
+            }
         ]
 
     failing = Mock()
@@ -282,5 +303,5 @@ def test_xikeos_vlans_gather_vlans_decodes_bytes_and_reports_failures():
         with pytest.raises(RuntimeError, match="gather failed"):
             vlans_module.gather_vlans(failing)
 
-    assert "show vlan brief" in failing.fail_json.call_args.kwargs["msg"]
+    assert "show vlan" in failing.fail_json.call_args.kwargs["msg"]
     assert "connection lost" in failing.fail_json.call_args.kwargs["msg"]

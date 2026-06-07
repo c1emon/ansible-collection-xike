@@ -46,6 +46,69 @@ def parse_vlan_brief(output):
     return vlans
 
 
+def parse_vlan(output):
+    """
+    Parse 'show vlan' output and return VLAN facts.
+
+    Expected output format:
+    VLAN Name         Type       Media     Ports
+    ---- ------------ ---------- --------- ----------------------------------------
+    1    default      Static     ENET      Ethernet1/0/1       Ethernet1/0/2(T)
+                                       Ethernet1/0/3(T)    Ethernet1/0/4(T)
+    10   dev          Static     ENET      Ethernet1/0/3(T)    Ethernet1/0/4(T)
+    """
+    if not output:
+        return []
+
+    vlans = []
+    current_vlan = None
+    data_started = False
+
+    for line in output.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.upper().startswith("VLAN") and "NAME" in stripped.upper():
+            continue
+        if stripped.startswith("---"):
+            data_started = True
+            continue
+        if not data_started:
+            continue
+
+        vlan_match = re.match(r"^(\d+)\s+(\S+)\s+(\S+)\s+(\S+)\s*(.*)$", stripped)
+        if vlan_match:
+            if current_vlan:
+                vlans.append(current_vlan)
+            current_vlan = {
+                "vlan_id": int(vlan_match.group(1)),
+                "name": vlan_match.group(2),
+                "type": vlan_match.group(3),
+                "media": vlan_match.group(4),
+                "state": "active",
+                "status": "active",
+                "ports": _parse_show_vlan_ports(vlan_match.group(5)),
+            }
+            continue
+
+        if current_vlan:
+            current_vlan["ports"].extend(_parse_show_vlan_ports(stripped))
+
+    if current_vlan:
+        vlans.append(current_vlan)
+
+    return vlans
+
+
+def _parse_show_vlan_ports(text):
+    ports = []
+    for port in re.findall(r"\S+", text or ""):
+        tagged = port.endswith("(T)")
+        name = port[:-3] if tagged else port
+        ports.append({"name": name, "tagged": tagged})
+    return ports
+
+
 def parse_vlan_line(line):
     """
     Parse a single VLAN line from 'show vlan brief' output.
