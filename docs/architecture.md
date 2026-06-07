@@ -128,6 +128,23 @@ ansible_network_os: xike.xikeos.xikeos
 - **Cliconf**: `plugins/cliconf/xikeos.py` operational command and configuration APIs
 - **References**: Netmiko Raisecom, Genie, and pyATS may inform parser and prompt work. TextFSM is a runtime dependency for complex table parsing.
 
+### Controller-Injected Parser Templates
+
+Modules that need bundled parser templates load those templates on the Ansible
+control node through their action plugins before module execution. For VLANs,
+`plugins/action/xikeos_vlans.py` reads
+`plugins/module_utils/facts/textfsm_templates/show_vlan.textfsm` and injects the
+template content into the module via the internal `_textfsm_templates` argument.
+That argument is intentionally omitted from public module documentation and
+examples.
+
+Parser helpers prefer injected template content, then local template files for
+direct development or unit-test use. If neither source is available, they raise
+an explicit missing-template error naming the template and expected path instead
+of silently falling back to duplicated built-in template strings. This keeps the
+file templates as the parser source of truth while avoiding reliance on
+non-Python template files being present in the AnsiballZ module payload.
+
 ## Resource Module Lifecycle
 
 Each resource module follows a consistent lifecycle:

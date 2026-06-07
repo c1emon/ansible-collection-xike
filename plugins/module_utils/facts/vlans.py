@@ -17,7 +17,7 @@ from ansible_collections.xike.xikeos.plugins.module_utils.xikeos import (
 SHOW_VLAN_TEMPLATE = "show_vlan.textfsm"
 
 
-def parse_vlan(output):
+def parse_vlan(output, textfsm_templates=None):
     """
     Parse 'show vlan' output and return VLAN facts.
 
@@ -32,7 +32,7 @@ def parse_vlan(output):
         return []
 
     vlans = []
-    rows = parse_textfsm_template(output, SHOW_VLAN_TEMPLATE)
+    rows = parse_textfsm_template(output, SHOW_VLAN_TEMPLATE, templates=textfsm_templates)
 
     for row in rows:
         vlans.append(
@@ -59,7 +59,7 @@ def _normalize_show_vlan_ports(raw_ports):
     return ports
 
 
-def get_facts(facts_module, connection, command="show vlan"):
+def get_facts(facts_module, connection, command="show vlan", textfsm_templates=None):
     """
     Get VLAN facts from the device.
 
@@ -82,7 +82,7 @@ def get_facts(facts_module, connection, command="show vlan"):
         return {"vlans": []}
 
     # Parse the output
-    vlans = parse_vlan(stdout)
+    vlans = parse_vlan(stdout, textfsm_templates=textfsm_templates)
 
     return {
         "vlans": vlans,

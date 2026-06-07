@@ -94,6 +94,14 @@ dependencies. Install `ttp` and `textfsm` in the Python environment used by the
 Ansible control node before gathering VLAN facts or using `xikeos_vlans`
 current-state diffing.
 
+VLAN gathering loads the bundled `show_vlan.textfsm` template on the control
+node through the `xikeos_vlans` action plugin and passes the template to the
+module as an internal argument. The module can still use local template files
+for direct development tests, but live AnsiballZ execution does not require
+template data files inside the module payload. If a required parser template is
+neither injected nor available locally, the parser fails explicitly with the
+missing template name and expected path.
+
 ## Installation
 
 ### From Ansible Galaxy (once published)

@@ -11,6 +11,7 @@ import pytest
 
 from ansible_collections.xike.xikeos.plugins.cliconf import xikeos as cliconf_module
 from ansible_collections.xike.xikeos.plugins.cliconf.xikeos import Cliconf
+from ansible_collections.xike.xikeos.plugins.action import xikeos_vlans as action_vlans_module
 from ansible_collections.xike.xikeos.plugins.modules import (
     xikeos_command as command_module,
     xikeos_config as config_module,
@@ -276,6 +277,7 @@ def test_xikeos_vlans_normalize_and_lifecycle():
 
 def test_xikeos_vlans_gather_vlans_decodes_bytes_and_reports_failures():
     module = Mock()
+    module.params = {}
     module.fail_json.side_effect = RuntimeError("gather failed")
 
     output = b"""VLAN Name         Type       Media     Ports
@@ -305,3 +307,26 @@ def test_xikeos_vlans_gather_vlans_decodes_bytes_and_reports_failures():
 
     assert "show vlan" in failing.fail_json.call_args.kwargs["msg"]
     assert "connection lost" in failing.fail_json.call_args.kwargs["msg"]
+
+
+def test_xikeos_vlans_action_injects_bundled_textfsm_template_before_delegating():
+    action = action_vlans_module.ActionModule.__new__(action_vlans_module.ActionModule)
+    action._task = Mock(args={"_textfsm_templates": {"existing.textfsm": "existing"}})
+
+    with patch.object(
+        action_vlans_module.ActionModule,
+        "_load_textfsm_template",
+        return_value="bundled-template",
+    ) as load_mock, patch.object(
+        action_vlans_module.NormalActionModule,
+        "run",
+        return_value={"ok": True},
+    ) as parent_run:
+        assert action.run(tmp="tmp", task_vars={"foo": "bar"}) == {"ok": True}
+
+    load_mock.assert_called_once_with(action_vlans_module.SHOW_VLAN_TEMPLATE)
+    assert action._task.args["_textfsm_templates"] == {
+        "existing.textfsm": "existing",
+        action_vlans_module.SHOW_VLAN_TEMPLATE: "bundled-template",
+    }
+    parent_run.assert_called_once_with(tmp="tmp", task_vars={"foo": "bar"})

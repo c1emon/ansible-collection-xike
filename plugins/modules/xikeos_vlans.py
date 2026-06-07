@@ -203,7 +203,10 @@ def gather_vlans(module: Any) -> list[dict[str, Any]]:
         module.fail_json(msg="failed to gather VLAN state with 'show vlan': %s" % to_text(exc))
         return []
     output = to_text(stdout[0] if stdout else "", errors="surrogate_or_strict")
-    return [_normalize_vlan(vlan) for vlan in parse_vlan(output)]
+    return [
+        _normalize_vlan(vlan)
+        for vlan in parse_vlan(output, textfsm_templates=module.params.get("_textfsm_templates"))
+    ]
 
 
 def build_after_state(before: list[dict[str, Any]], desired: list[dict[str, Any]], state: str) -> list[dict[str, Any]]:
@@ -248,6 +251,11 @@ def main() -> None:
             type="str",
             choices=["merged", "replaced", "deleted", "gathered"],
             default="merged",
+        ),
+        _textfsm_templates=dict(
+            type="dict",
+            required=False,
+            no_log=True,
         ),
     )
 

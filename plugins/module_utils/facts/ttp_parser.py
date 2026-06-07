@@ -12,13 +12,14 @@ import os
 TTP_TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "ttp_templates")
 
 
-def parse_ttp_template(output, template_name, result_key=None):
+def parse_ttp_template(output, template_name, result_key=None, templates=None):
     """Parse command output with a bundled TTP template.
 
     Args:
         output: Command output to parse.
         template_name: File name under the bundled ``ttp_templates`` directory.
         result_key: Optional top-level key to extract from the flattened result.
+        templates: Optional mapping of template names to injected template content.
 
     Returns:
         A predictable flattened Python result suitable for facts parsers. Empty
@@ -27,7 +28,7 @@ def parse_ttp_template(output, template_name, result_key=None):
     if not output:
         return []
 
-    template = _load_ttp_template(template_name)
+    template = _load_ttp_template(template_name, templates=templates)
 
     try:
         from ttp import ttp
@@ -43,13 +44,17 @@ def parse_ttp_template(output, template_name, result_key=None):
     return _flatten_ttp_result(parser.result(), result_key=result_key)
 
 
-def _load_ttp_template(template_name):
+def _load_ttp_template(template_name, templates=None):
+    template_content = (templates or {}).get(template_name)
+    if template_content is not None:
+        return template_content
+
     template_path = os.path.join(TTP_TEMPLATE_DIR, template_name)
     if not os.path.isfile(template_path):
         raise FileNotFoundError(
-            "Bundled TTP template '{0}' was not found at '{1}'. Reinstall the "
-            "xike.xikeos collection or verify collection packaging includes "
-            "plugins/module_utils/facts/ttp_templates/*.ttp.".format(
+            "Bundled TTP template '{0}' was not injected and was not found at '{1}'. "
+            "Run through the module action plugin or reinstall the xike.xikeos collection and "
+            "verify collection packaging includes plugins/module_utils/facts/ttp_templates/*.ttp.".format(
                 template_name,
                 template_path,
             )
