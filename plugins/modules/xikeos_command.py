@@ -27,7 +27,7 @@ EXAMPLES = """
   xike.xikeos.xikeos_command:
     commands:
       - show version
-      - show vlan brief
+      - show vlan
   register: result
 
 - debug:

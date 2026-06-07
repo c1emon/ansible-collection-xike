@@ -1022,7 +1022,7 @@ Execute read-only show commands on Xike switches.
   xike.xikeos.xikeos_command:
     commands:
       - show version
-      - show vlan brief
+      - show vlan
   register: result
 
 - debug:

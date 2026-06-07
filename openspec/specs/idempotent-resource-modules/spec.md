@@ -11,8 +11,8 @@ Reference resource modules SHALL gather current device state from the target dev
 - **THEN** it MUST collect VLAN state from device show-command output and expose the normalized state as `before`.
 
 #### Scenario: VLAN current-state gathering preserves normalized parser contract
-- **WHEN** `xikeos_vlans` gathers current state from `show vlan brief` output parsed through the internal TTP template path
-- **THEN** it MUST receive the same normalized VLAN fields required for idempotent diffing, including integer VLAN IDs, names, states, and port lists.
+- **WHEN** `xikeos_vlans` gathers current state from `show vlan` output parsed through the internal template path
+- **THEN** it MUST receive the same normalized VLAN fields required for idempotent diffing, including integer VLAN IDs, names, states, VLAN types, media, and port lists.
 
 ### Requirement: Resource modules compute idempotent command diffs
 Reference resource modules SHALL compare desired state with gathered current state and generate only the commands needed to reach the desired state.

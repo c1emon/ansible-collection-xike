@@ -140,7 +140,7 @@ def test_network_get_config_uses_flags_and_returns_text():
 
 
 def test_xikeos_command_stdout_and_lines():
-    module = _fake_module({"commands": ["show version", "show vlan brief"]})
+    module = _fake_module({"commands": ["show version", "show vlan"]})
     with patch.object(command_module, "AnsibleModule", return_value=module), patch.object(
         command_module, "run_commands", return_value=[b"line1\nline2", "single"]
     ):
@@ -148,7 +148,7 @@ def test_xikeos_command_stdout_and_lines():
             command_module.main()
 
     result = module.exit_json.call_args.kwargs
-    assert result["commands"] == ["show version", "show vlan brief"]
+    assert result["commands"] == ["show version", "show vlan"]
     assert result["stdout"] == ["line1\nline2", "single"]
     assert result["stdout_lines"] == [["line1", "line2"], ["single"]]
     assert result["changed"] is False
