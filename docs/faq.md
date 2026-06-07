@@ -162,7 +162,7 @@ ssh admin@switch
 
 # Capture output for each feature
 show version
-show vlan brief
+show vlan
 show interface brief
 show running-config
 # ... capture all relevant commands
@@ -174,8 +174,8 @@ If the CLI output format changed, update the corresponding facts parser:
 ```python
 # Example: plugins/module_utils/facts/vlans.py
 
-def parse_vlan_brief(output):
-    """Parse 'show vlan brief' output."""
+def parse_vlan(output):
+    """Parse 'show vlan' output."""
     # Check if output format matches expected pattern
     # Update regex patterns if needed
     # Handle new fields or changed formats

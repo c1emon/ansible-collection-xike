@@ -140,7 +140,7 @@ def test_network_get_config_uses_flags_and_returns_text():
 
 
 def test_xikeos_command_stdout_and_lines():
-    module = _fake_module({"commands": ["show version", "show vlan brief"]})
+    module = _fake_module({"commands": ["show version", "show vlan"]})
     with patch.object(command_module, "AnsibleModule", return_value=module), patch.object(
         command_module, "run_commands", return_value=[b"line1\nline2", "single"]
     ):
@@ -148,7 +148,7 @@ def test_xikeos_command_stdout_and_lines():
             command_module.main()
 
     result = module.exit_json.call_args.kwargs
-    assert result["commands"] == ["show version", "show vlan brief"]
+    assert result["commands"] == ["show version", "show vlan"]
     assert result["stdout"] == ["line1\nline2", "single"]
     assert result["stdout_lines"] == [["line1", "line2"], ["single"]]
     assert result["changed"] is False
@@ -278,15 +278,23 @@ def test_xikeos_vlans_gather_vlans_decodes_bytes_and_reports_failures():
     module = Mock()
     module.fail_json.side_effect = RuntimeError("gather failed")
 
-    def _parse_vlan(output):
-        assert isinstance(output, str)
-        return [{"vlan_id": 10, "name": "DATA", "state": "active", "ports": [], "type": "Static", "media": "ENET"}]
-
-    with patch.object(vlans_module, "run_commands", return_value=[b"VLAN Name\n10  DATA  active"]), patch.object(
-        vlans_module, "parse_vlan", side_effect=_parse_vlan
-    ):
+    output = b"""VLAN Name         Type       Media     Ports
+---- ------------ ---------- --------- ----------------------------------------
+10   DATA         Static     ENET      Ethernet1/0/1       Ethernet1/0/2(T)
+"""
+    with patch.object(vlans_module, "run_commands", return_value=[output]):
         assert vlans_module.gather_vlans(module) == [
-            {"vlan_id": 10, "name": "DATA", "state": "active", "ports": [], "type": "Static", "media": "ENET"}
+            {
+                "vlan_id": 10,
+                "name": "DATA",
+                "state": "active",
+                "ports": [
+                    {"name": "Ethernet1/0/1", "tagged": False},
+                    {"name": "Ethernet1/0/2", "tagged": True},
+                ],
+                "type": "Static",
+                "media": "ENET",
+            }
         ]
 
     failing = Mock()
