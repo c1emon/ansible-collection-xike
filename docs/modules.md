@@ -2,6 +2,12 @@
 
 Complete reference for all 17 modules in the `xike.xikeos` collection.
 
+Resource-module state behavior is explicit:
+
+- Lifecycle-complete modules (`xikeos_vlans`, `xikeos_static_routes`, `xikeos_acls`, `xikeos_interfaces`, `xikeos_l2_interfaces`, `xikeos_l3_interfaces`, `xikeos_lag_interfaces`) gather current state, compute diffs, honor check mode, apply changes through the Xike OS network configuration path, and report `before`/`after`.
+- `xikeos_vlans` also supports non-mutating `state=gathered`.
+- Specialty modules (`xikeos_stp`, `xikeos_erps`, `xikeos_eaps`, `xikeos_qinq`, `xikeos_mirror`, `xikeos_port_isolate`, `xikeos_flex_monitor_link`, `xikeos_ospfv2`) currently support explicit non-mutating `state=rendered`; their mutating states fail fast until facts/diff/apply support is implemented.
+
 ## Table of Contents
 
 - [Interface Modules](#interface-modules)

@@ -5,6 +5,9 @@
 from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
+from ansible.module_utils.common.text.converters import to_text
+from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.xikeos import run_commands
+
 
 class L2InterfacesFacts(object):
     """Gather L2 interface facts from Xike switches."""
@@ -16,15 +19,12 @@ class L2InterfacesFacts(object):
 
     def _get_facts(self):
         """Parse L2 interface information."""
-        # In a real implementation, this would execute:
-        # show running-config
-        # or
-        # show interface switchport
-        # and parse the output
-        #
-        # For now, we return an empty dict as facts gathering
-        # requires actual device connection
-        self.facts = {}
+        try:
+            stdout = run_commands(self.module, ['show running-config'], check_rc=True) or []
+            output = to_text(stdout[0] if stdout else '', errors='surrogate_or_strict')
+            self.facts = parse_switchport_config(output)
+        except Exception as exc:
+            self.module.fail_json(msg='failed to gather L2 interface facts: {0}'.format(to_text(exc)))
 
     def get_facts(self):
         """Return gathered facts."""

@@ -5,6 +5,9 @@
 from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
+from ansible.module_utils.common.text.converters import to_text
+from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.xikeos import run_commands
+
 
 class L3InterfacesFacts(object):
     """Gather L3 interface facts from Xike switches."""
@@ -20,26 +23,12 @@ class L3InterfacesFacts(object):
         Executes 'show interface vlan-interface' commands on the device
         and parses IP address information.
         """
-        self.facts = {}
-
         try:
-            # Try to get VLAN interface list
-            rc, out, err = self.module.run_command('show interface vlan-interface')
-            if rc != 0:
-                return
-
-            # Parse interface names from output
-            interfaces = self._parse_interface_list(out)
-            for iface_name in interfaces:
-                rc2, iface_out, err2 = self.module.run_command(
-                    'show interface vlan-interface {0}'.format(iface_name)
-                )
-                if rc2 == 0:
-                    parsed = parse_interface_ip(iface_out)
-                    if parsed.get('ipv4') or parsed.get('ipv6'):
-                        self.facts[iface_name] = parsed
-        except Exception:
-            pass
+            stdout = run_commands(self.module, ['show running-config'], check_rc=True) or []
+            output = to_text(stdout[0] if stdout else '', errors='surrogate_or_strict')
+            self.facts = parse_running_config(output)
+        except Exception as exc:
+            self.module.fail_json(msg='failed to gather L3 interface facts: {0}'.format(to_text(exc)))
 
     def _parse_interface_list(self, output):
         """Parse interface names from 'show interface vlan-interface' output."""

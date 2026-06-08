@@ -91,7 +91,7 @@ options:
       - C(replaced) - Replaces existing QinQ configuration with specified config.
       - C(deleted) - Removes QinQ configuration.
     type: str
-    choices: ['merged', 'replaced', 'deleted']
+    choices: ['merged', 'replaced', 'deleted', 'rendered']
     default: merged
 author: Andy
 """
@@ -155,6 +155,7 @@ commands:
 """
 
 from ansible.module_utils.basic import AnsibleModule
+from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.lifecycle import exit_rendered_or_fail
 
 
 def get_commands(config, state):
@@ -268,7 +269,7 @@ def main():
         ),
         state=dict(
             type="str",
-            choices=["merged", "replaced", "deleted"],
+            choices=["merged", "replaced", "deleted", "rendered"],
             default="merged",
         ),
     )
@@ -281,27 +282,7 @@ def main():
     config = module.params.get("config")
     state = module.params.get("state", "merged")
 
-    result = {
-        "changed": False,
-        "commands": [],
-    }
-
-    if state == "deleted":
-        commands = get_commands(config, state)
-    elif not config:
-        module.exit_json(**result)
-    else:
-        commands = get_commands(config, state)
-
-    result["commands"] = commands
-
-    if module.check_mode:
-        module.exit_json(**result)
-
-    if commands:
-        result["changed"] = True
-
-    module.exit_json(**result)
+    exit_rendered_or_fail(module, "xikeos_qinq", config, state, get_commands, "merged")
 
 
 if __name__ == "__main__":

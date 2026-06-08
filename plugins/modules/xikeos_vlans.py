@@ -102,6 +102,7 @@ from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.common.text.converters import to_text
 from ansible_collections.xike.xikeos.plugins.module_utils.facts.vlans import parse_vlan
 from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config, run_commands
+from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.lifecycle import run_resource_module_lifecycle
 
 
 def vlan_id_range(vlan_ids: list[int]) -> str:
@@ -196,6 +197,27 @@ def get_commands(config: list[dict[str, Any]], state: str, current: Optional[lis
     return commands
 
 
+def validate_vlan_request(module: Any, config: list[dict[str, Any]], state: str) -> None:
+    """Fail fast for VLAN lifecycle edge cases that are not safe to mutate."""
+    if state == "gathered":
+        return
+
+    for vlan in config:
+        vlan_id = int(vlan["vlan_id"])
+        vlan_state = vlan.get("state") or vlan.get("status") or "active"
+        if vlan_state == "suspend":
+            module.fail_json(
+                msg=(
+                    "VLAN suspend state is not supported by xikeos_vlans mutating states; "
+                    "use state=gathered to inspect current suspended VLANs"
+                )
+            )
+            return
+        if state == "deleted" and vlan_id == 1:
+            module.fail_json(msg="Deleting default VLAN 1 is not supported")
+            return
+
+
 def gather_vlans(module: Any) -> list[dict[str, Any]]:
     try:
         stdout = run_commands(module, ["show vlan"], check_rc=True)
@@ -266,36 +288,20 @@ def main() -> None:
 
     config = module.params.get("config", [])
     state = module.params.get("state", "merged")
+    validate_vlan_request(module, config or [], state)
 
-    result = {
-        "changed": False,
-        "commands": [],
-        "before": [],
-        "after": [],
-    }
-
-    before = gather_vlans(module)
-    result["before"] = before
-
-    if state == "gathered":
-        module.exit_json(changed=False, gathered=before)
-
-    if not config:
-        result["after"] = before
-        module.exit_json(**result)
-
-    commands = get_commands(config, state, before)
-    result["commands"] = commands
-    result["changed"] = bool(commands)
-    result["after"] = build_after_state(before, config, state) if commands else before
-
-    if module.check_mode:
-        module.exit_json(**result)
-
-    if commands:
-        load_config(module, commands)
-
-    module.exit_json(**result)
+    run_resource_module_lifecycle(
+        module=module,
+        config=config,
+        state=state,
+        gather=gather_vlans,
+        build_commands=get_commands,
+        build_after=build_after_state,
+        mutating_states=("merged", "replaced", "deleted"),
+        gathered_states=("gathered",),
+        rendered_states=(),
+        apply_config=load_config,
+    )
 
 
 if __name__ == "__main__":

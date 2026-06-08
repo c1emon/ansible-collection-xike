@@ -83,7 +83,7 @@ options:
     description: Desired state of the configuration
     type: str
     default: merged
-    choices: ['merged', 'replaced']
+    choices: ['merged', 'replaced', 'rendered']
 author: Andy
 """
 
@@ -193,11 +193,11 @@ commands:
 """
 
 from ansible.module_utils.basic import AnsibleModule
+from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.lifecycle import exit_rendered_or_fail
 
 try:
     from ansible_collections.xike.xikeos.plugins.module_utils.facts.ospfv2 import (
         Ospfv2Facts,
-        parse_running_config,
     )
     HAS_FACTS = True
 except ImportError:
@@ -453,7 +453,7 @@ def main():
             state=dict(
                 type='str',
                 default='merged',
-                choices=['merged', 'replaced'],
+                choices=['merged', 'replaced', 'rendered'],
             ),
         ),
         supports_check_mode=True,
@@ -465,6 +465,24 @@ def main():
     # Normalize area IDs
     if config:
         config = _normalize_config(config)
+
+    if state == 'rendered':
+        exit_rendered_or_fail(
+            module,
+            'xikeos_ospfv2',
+            config,
+            state,
+            lambda cfg, _state: build_commands(cfg, {'processes': {}}),
+            'merged',
+        )
+    elif config is not None:
+        module.fail_json(
+            msg=(
+                'xikeos_ospfv2 supports state=rendered only until lifecycle-safe gather, diff, '
+                'and load_config apply support is implemented; state={0} is unsupported'
+            ).format(state)
+        )
+        return
 
     # Gather existing facts
     if HAS_FACTS:

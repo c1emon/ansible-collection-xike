@@ -7,6 +7,9 @@ __metaclass__ = type
 
 import re
 
+from ansible.module_utils.common.text.converters import to_text
+from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.xikeos import run_commands
+
 
 class AclsFacts(object):
     """Gather ACL facts from Xike OS devices."""
@@ -22,18 +25,15 @@ class AclsFacts(object):
         Executes 'show access-list config' and 'show access-list runtime'
         on the device to gather ACL configurations and bindings.
         """
+        commands = ['show access-list config', 'show access-list runtime']
         try:
-            # Get ACL configuration
-            rc, out, err = self.module.run_command('show access-list config')
-            if rc == 0:
-                self.facts['acls'] = parse_access_list_config(out)
-
-            # Get ACL bindings (runtime)
-            rc2, out2, err2 = self.module.run_command('show access-list runtime')
-            if rc2 == 0:
-                self.facts['acl_bindings'] = parse_access_list_runtime(out2)
-        except Exception:
-            pass
+            stdout = run_commands(self.module, commands, check_rc=True) or []
+            config_output = to_text(stdout[0] if len(stdout) > 0 else '', errors='surrogate_or_strict')
+            runtime_output = to_text(stdout[1] if len(stdout) > 1 else '', errors='surrogate_or_strict')
+            self.facts['acls'] = parse_access_list_config(config_output)
+            self.facts['acl_bindings'] = parse_access_list_runtime(runtime_output)
+        except Exception as exc:
+            self.module.fail_json(msg="failed to gather ACL facts: {0}".format(to_text(exc)))
 
 
 def parse_access_list_config(output):

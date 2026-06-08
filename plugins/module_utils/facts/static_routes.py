@@ -7,6 +7,9 @@ __metaclass__ = type
 
 import re
 
+from ansible.module_utils.common.text.converters import to_text
+from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.xikeos import run_commands
+
 
 class StaticRoutesFacts(object):
     """Gather static route facts from Xike OS devices."""
@@ -22,22 +25,15 @@ class StaticRoutesFacts(object):
         Executes 'show ip route' on the device and parses static routes.
         Also executes 'show ipv6 route' if IPv6 is supported.
         """
+        commands = ['show ip route', 'show ipv6 route']
         try:
-            # Get IPv4 static routes
-            rc, out, err = self.module.run_command('show ip route')
-            if rc == 0:
-                self.facts['static_routes'].extend(
-                    parse_show_ip_route(out, route_type='ipv4')
-                )
-
-            # Get IPv6 static routes
-            rc6, out6, err6 = self.module.run_command('show ipv6 route')
-            if rc6 == 0:
-                self.facts['static_routes'].extend(
-                    parse_show_ip_route(out6, route_type='ipv6')
-                )
-        except Exception:
-            pass
+            stdout = run_commands(self.module, commands, check_rc=True) or []
+            ipv4_output = to_text(stdout[0] if len(stdout) > 0 else '', errors='surrogate_or_strict')
+            ipv6_output = to_text(stdout[1] if len(stdout) > 1 else '', errors='surrogate_or_strict')
+            self.facts['static_routes'].extend(parse_show_ip_route(ipv4_output, route_type='ipv4'))
+            self.facts['static_routes'].extend(parse_show_ip_route(ipv6_output, route_type='ipv6'))
+        except Exception as exc:
+            self.module.fail_json(msg="failed to gather static route facts: {0}".format(to_text(exc)))
 
 
 def parse_show_ip_route(output, route_type='ipv4'):

@@ -38,7 +38,7 @@ options:
       - C(present) - Creates or updates the port isolation group.
       - C(absent) - Removes the port isolation group or specified members.
     type: str
-    choices: ['present', 'absent']
+    choices: ['present', 'absent', 'rendered']
     default: present
 author: Andy
 """
@@ -89,6 +89,7 @@ commands:
 """
 
 from ansible.module_utils.basic import AnsibleModule
+from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.lifecycle import exit_rendered_or_fail
 
 
 def get_commands(config, state):
@@ -160,7 +161,7 @@ def main():
         ),
         state=dict(
             type="str",
-            choices=["present", "absent"],
+            choices=["present", "absent", "rendered"],
             default="present",
         ),
     )
@@ -176,25 +177,7 @@ def main():
     config = module.params.get("config") or {}
     state = module.params.get("state", "present")
 
-    result = {
-        "changed": False,
-        "commands": [],
-    }
-
-    if not config:
-        module.exit_json(**result)
-
-    # Generate commands
-    commands = get_commands(config, state)
-    result["commands"] = commands
-
-    if module.check_mode:
-        module.exit_json(**result)
-
-    if commands:
-        result["changed"] = True
-
-    module.exit_json(**result)
+    exit_rendered_or_fail(module, "xikeos_port_isolate", config, state, get_commands, "present")
 
 
 if __name__ == "__main__":

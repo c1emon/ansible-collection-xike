@@ -5,6 +5,29 @@ __metaclass__ = type
 
 import re
 
+from ansible.module_utils.common.text.converters import to_text
+from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.xikeos import run_commands
+
+
+class InterfacesFacts(object):
+    """Gather base interface facts from Xike OS devices."""
+
+    def __init__(self, module):
+        self.module = module
+        self.facts = {}
+        self._get_facts()
+
+    def _get_facts(self):
+        try:
+            stdout = run_commands(self.module, ['show interface brief'], check_rc=True) or []
+            output = to_text(stdout[0] if stdout else '', errors='surrogate_or_strict')
+            self.facts = {iface['name']: iface for iface in parse_interface_brief(output)}
+        except Exception as exc:
+            self.module.fail_json(msg='failed to gather interface facts: {0}'.format(to_text(exc)))
+
+    def get_facts(self):
+        return self.facts
+
 
 def parse_interface_brief(output):
     """

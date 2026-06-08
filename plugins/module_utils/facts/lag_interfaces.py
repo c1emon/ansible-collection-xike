@@ -5,6 +5,9 @@
 from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
+from ansible.module_utils.common.text.converters import to_text
+from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.xikeos import run_commands
+
 
 class LagInterfacesFacts(object):
     """Gather LAG (eth-trunk) interface facts from Xike switches."""
@@ -17,12 +20,15 @@ class LagInterfacesFacts(object):
     def _get_facts(self):
         """Parse LAG interface information.
 
-        In a real implementation, this would execute:
-          show running-config
-          show lacp local
-        and parse the output.
+        Executes show running-config through the network connection and parses
+        eth-trunk interface blocks.
         """
-        self.facts = {}
+        try:
+            stdout = run_commands(self.module, ['show running-config'], check_rc=True) or []
+            output = to_text(stdout[0] if stdout else '', errors='surrogate_or_strict')
+            self.facts = parse_lag_config(output)
+        except Exception as exc:
+            self.module.fail_json(msg='failed to gather LAG interface facts: {0}'.format(to_text(exc)))
 
     def get_facts(self):
         """Return gathered facts."""

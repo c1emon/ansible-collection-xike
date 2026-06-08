@@ -3,8 +3,6 @@
 from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
-import pytest
-
 # Import command generation functions directly (no device connection needed)
 from ansible_collections.xike.xikeos.plugins.modules.xikeos_vlans import (
     get_commands as vlan_get_commands,

@@ -95,7 +95,7 @@ options:
       - C(merged) - Creates or updates STP settings as specified.
       - C(replaced) - Replaces existing STP configuration with specified config.
     type: str
-    choices: ['merged', 'replaced']
+    choices: ['merged', 'replaced', 'rendered']
     default: merged
 author: Andy
 """
@@ -162,6 +162,7 @@ commands:
 """
 
 from ansible.module_utils.basic import AnsibleModule
+from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.lifecycle import exit_rendered_or_fail
 
 
 def vlan_id_to_ranges(vlan_ids):
@@ -343,7 +344,7 @@ def main():
         ),
         state=dict(
             type="str",
-            choices=["merged", "replaced"],
+            choices=["merged", "replaced", "rendered"],
             default="merged",
         ),
     )
@@ -356,25 +357,7 @@ def main():
     config = module.params.get("config", {})
     state = module.params.get("state", "merged")
 
-    result = {
-        "changed": False,
-        "commands": [],
-    }
-
-    if not config:
-        module.exit_json(**result)
-
-    # Generate commands
-    commands = get_commands(config, state)
-    result["commands"] = commands
-
-    if module.check_mode:
-        module.exit_json(**result)
-
-    if commands:
-        result["changed"] = True
-
-    module.exit_json(**result)
+    exit_rendered_or_fail(module, "xikeos_stp", config, state, get_commands, "merged")
 
 
 if __name__ == "__main__":
