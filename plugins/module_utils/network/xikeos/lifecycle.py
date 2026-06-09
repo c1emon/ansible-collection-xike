@@ -2,33 +2,68 @@ from __future__ import absolute_import, division, print_function
 
 __metaclass__ = type
 
+from typing import TYPE_CHECKING, Any, Callable
+
+if TYPE_CHECKING:
+    from ansible.module_utils.basic import AnsibleModule
+
 from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config
 
 
-DEFAULT_MUTATING_STATES = ("merged", "replaced", "overridden", "deleted")
+DEFAULT_MUTATING_STATES: tuple[str, ...] = ("merged", "replaced", "overridden", "deleted")
 
 
 def run_resource_module_lifecycle(
-    module,
-    config,
-    state,
-    gather,
-    build_commands,
-    build_after,
-    mutating_states=DEFAULT_MUTATING_STATES,
-    gathered_states=("gathered",),
-    rendered_states=("rendered",),
-    rendered_key="rendered",
-    apply_config=load_config,
-    gather_after_apply=False,
-):
+    module: "AnsibleModule",
+    config: Any,
+    state: str,
+    gather: Callable[["AnsibleModule"], Any],
+    build_commands: Callable[[Any, str, Any], list[str]],
+    build_after: Callable[[Any, Any, str], Any],
+    mutating_states: tuple[str, ...] = DEFAULT_MUTATING_STATES,
+    gathered_states: tuple[str, ...] = ("gathered",),
+    rendered_states: tuple[str, ...] = ("rendered",),
+    rendered_key: str = "rendered",
+    apply_config: Callable[["AnsibleModule", list[str]], Any] = load_config,
+    gather_after_apply: bool = False,
+) -> None:
     """Run the standard lifecycle for a Xike OS declarative resource module.
 
     The helper owns common result fields and control flow while callers keep
     resource-specific parsing, diffing, validation, and after-state simulation.
+
+    Args:
+        module: Active ``AnsibleModule`` instance, or an instance of a subclass
+            or compatible test double. The helper calls its ``exit_json()``,
+            ``fail_json()``, and reads ``check_mode``.
+        config: Desired resource configuration from module params. The concrete
+            shape is module-specific, commonly ``list[dict[str, Any]]`` for
+            migrated resource modules. Falsy values are normalized to an empty
+            list for no-op handling.
+        state: Requested module state, such as ``merged``, ``replaced``,
+            ``deleted``, ``gathered``, or ``rendered``.
+        gather: Callback that gathers current resource state from the device.
+            It receives ``module`` and returns the normalized ``before`` state.
+        build_commands: Callback that computes command diffs. It receives
+            ``config``, ``state``, and ``before``, then returns CLI commands.
+        build_after: Callback that computes the expected ``after`` state for
+            mutating executions. It receives ``before``, ``config``, and
+            ``state``.
+        mutating_states: States that are allowed to apply configuration.
+        gathered_states: Non-mutating states that return gathered facts.
+        rendered_states: Non-mutating states that return rendered commands.
+        rendered_key: Result key used to expose rendered commands.
+        apply_config: Callback used to apply commands to the device, normally
+            ``load_config``.
+        gather_after_apply: When true, gather current state again after a
+            successful apply and use it as ``after``.
+
+    Returns:
+        None. This helper terminates module execution through ``exit_json()`` or
+        ``fail_json()``.
     """
     config = config or []
-    result = {
+    result: dict[str, Any] = {
         "changed": False,
         "commands": [],
         "before": [],
@@ -69,9 +104,36 @@ def run_resource_module_lifecycle(
     module.exit_json(**result)
 
 
-def exit_rendered_or_fail(module, module_name, config, state, build_commands, render_state):
-    """Expose explicit rendered output and fail fast for unsafe mutating states."""
-    result = {"changed": False, "commands": []}
+def exit_rendered_or_fail(
+    module: "AnsibleModule",
+    module_name: str,
+    config: Any,
+    state: str,
+    build_commands: Callable[[Any, str], list[str]],
+    render_state: str,
+) -> None:
+    """Expose explicit rendered output and fail fast for unsafe mutating states.
+
+    Args:
+        module: Active ``AnsibleModule`` instance, or an instance of a subclass
+            or compatible test double. The helper calls its ``exit_json()`` or
+            ``fail_json()``.
+        module_name: Human-readable module name used in the failure message.
+        config: Desired resource configuration from module params. The concrete
+            shape is module-specific, commonly ``dict[str, Any]`` for specialty
+            modules. Falsy values return a no-op result.
+        state: Requested module state. Only ``rendered`` is accepted as a
+            non-mutating command-rendering state.
+        build_commands: Callback that renders commands. It receives ``config``
+            and ``render_state``.
+        render_state: Existing command-builder state to use when rendering
+            commands, for example ``merged`` or ``present``.
+
+    Returns:
+        None. This helper terminates module execution through ``exit_json()`` or
+        ``fail_json()``.
+    """
+    result: dict[str, Any] = {"changed": False, "commands": []}
     if not config:
         module.exit_json(**result)
 

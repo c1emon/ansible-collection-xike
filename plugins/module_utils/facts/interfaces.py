@@ -4,20 +4,27 @@ from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
 import re
+from typing import Any, TYPE_CHECKING
 
 from ansible.module_utils.common.text.converters import to_text
 from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.xikeos import run_commands
+
+if TYPE_CHECKING:
+    from ansible.module_utils.basic import AnsibleModule
+
+InterfaceFacts = dict[str, Any]
 
 
 class InterfacesFacts(object):
     """Gather base interface facts from Xike OS devices."""
 
-    def __init__(self, module):
+    def __init__(self, module: "AnsibleModule") -> None:
         self.module = module
-        self.facts = {}
+        self.facts: dict[str, InterfaceFacts] = {}
         self._get_facts()
 
-    def _get_facts(self):
+    def _get_facts(self) -> None:
+        """Collect interface brief data and index it by interface name."""
         try:
             stdout = run_commands(self.module, ['show interface brief'], check_rc=True) or []
             output = to_text(stdout[0] if stdout else '', errors='surrogate_or_strict')
@@ -25,11 +32,12 @@ class InterfacesFacts(object):
         except Exception as exc:
             self.module.fail_json(msg='failed to gather interface facts: {0}'.format(to_text(exc)))
 
-    def get_facts(self):
+    def get_facts(self) -> dict[str, InterfaceFacts]:
+        """Return the parsed interface facts."""
         return self.facts
 
 
-def parse_interface_brief(output):
+def parse_interface_brief(output: str) -> list[InterfaceFacts]:
     """
     Parse 'show interface brief' output into a list of interface dicts.
 
@@ -44,7 +52,7 @@ def parse_interface_brief(output):
         list of dict, each with keys: name, description, link, shutdown,
         speed, duplex, priority, pvid, mode, tag_vlan, untag_vlan
     """
-    interfaces = []
+    interfaces: list[InterfaceFacts] = []
 
     if not output:
         return interfaces

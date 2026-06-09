@@ -6,6 +6,8 @@
 from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
+from typing import Any, Mapping
+
 DOCUMENTATION = """
 module: xikeos_mirror
 short_description: Manage port mirroring on Xike OS switches
@@ -109,8 +111,15 @@ from ansible.module_utils.basic import AnsibleModule
 from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.lifecycle import exit_rendered_or_fail
 
 
-def get_commands(config, state):
-    """Generate CLI commands from mirror configuration."""
+def _format_port(port_spec: Mapping[str, str] | None) -> str | None:
+    """Format a port spec into the CLI form used by mirror commands."""
+    if not port_spec:
+        return None
+    return "{0} {1}".format(port_spec["type"], port_spec["id"])
+
+
+def get_commands(config: Mapping[str, Any], state: str) -> list[str]:
+    """Render mirror-group CLI commands for the requested state."""
     commands = []
     group_id = config.get("group_id")
 
@@ -189,8 +198,8 @@ def get_commands(config, state):
     return commands
 
 
-def main():
-    """Main entry point for the module."""
+def main() -> None:
+    """Run the port mirroring module entry point."""
     module_args = dict(
         config=dict(
             type="dict",

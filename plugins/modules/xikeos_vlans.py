@@ -134,6 +134,7 @@ def vlan_id_range(vlan_ids: list[int]) -> str:
 
 
 def _normalize_vlan(vlan: dict[str, Any]) -> dict[str, Any]:
+    """Normalize VLAN records to the keys used by lifecycle helpers."""
     normalized = {
         "vlan_id": int(vlan["vlan_id"]),
         "name": vlan.get("name") or "",
@@ -149,6 +150,7 @@ def _normalize_vlan(vlan: dict[str, Any]) -> dict[str, Any]:
 
 
 def _index_vlans(vlans: list[dict[str, Any]]) -> dict[int, dict[str, Any]]:
+    """Index normalized VLAN records by VLAN ID."""
     return {item["vlan_id"]: _normalize_vlan(item) for item in vlans}
 
 
@@ -219,6 +221,7 @@ def validate_vlan_request(module: Any, config: list[dict[str, Any]], state: str)
 
 
 def gather_vlans(module: Any) -> list[dict[str, Any]]:
+    """Collect VLAN state from the device and normalize parsed records."""
     try:
         stdout = run_commands(module, ["show vlan"], check_rc=True)
     except Exception as exc:
@@ -232,6 +235,7 @@ def gather_vlans(module: Any) -> list[dict[str, Any]]:
 
 
 def build_after_state(before: list[dict[str, Any]], desired: list[dict[str, Any]], state: str) -> list[dict[str, Any]]:
+    """Compute the expected VLAN state after a lifecycle operation."""
     after = _index_vlans(before)
     if state in ("merged", "replaced"):
         if state == "replaced":

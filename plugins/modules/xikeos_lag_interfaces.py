@@ -102,6 +102,13 @@ commands:
 from ansible.module_utils.basic import AnsibleModule
 from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config
 from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.lifecycle import run_resource_module_lifecycle
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from ansible.module_utils.basic import AnsibleModule as AnsibleModuleType
+
+LagInterfaceConfig = dict[str, Any]
+LagInterfaceState = dict[str, LagInterfaceConfig]
 
 try:
     from ansible_collections.xike.xikeos.plugins.module_utils.facts.lag_interfaces import (
@@ -112,13 +119,16 @@ except ImportError:
     HAS_FACTS = False
 
 
-def _extract_trunk_id(trunk_name):
+def _extract_trunk_id(trunk_name: str) -> str:
     """Extract numeric ID from trunk name like 'eth-trunk 1' -> 1."""
     parts = trunk_name.strip().split()
     return parts[-1] if parts else trunk_name
 
 
-def build_trunk_commands(config, existing_config):
+def build_trunk_commands(
+    config: LagInterfaceConfig,
+    existing_config: LagInterfaceState,
+) -> list[str]:
     """Build CLI commands for a single eth-trunk config entry.
 
     Args:
@@ -128,7 +138,7 @@ def build_trunk_commands(config, existing_config):
     Returns:
         list of CLI command strings (empty if no changes needed)
     """
-    commands = []
+    commands: list[str] = []
     trunk_name = config['name']
     trunk_id = _extract_trunk_id(trunk_name)
     existing = existing_config.get(trunk_name, {})
@@ -181,14 +191,24 @@ def build_trunk_commands(config, existing_config):
     return commands
 
 
-def build_lifecycle_commands(config_list, state, existing_config):
-    commands = []
+def build_lifecycle_commands(
+    config_list: list[LagInterfaceConfig],
+    state: str,
+    existing_config: LagInterfaceState,
+) -> list[str]:
+    """Build commands for all requested LAG interface configs."""
+    commands: list[str] = []
     for config in config_list:
         commands.extend(build_trunk_commands(config, existing_config))
     return commands
 
 
-def build_after_state(before, desired, state):
+def build_after_state(
+    before: LagInterfaceState,
+    desired: list[LagInterfaceConfig],
+    state: str,
+) -> LagInterfaceState:
+    """Build the expected normalized LAG interface state after lifecycle execution."""
     after = dict(before)
     if state == 'replaced':
         after = {}
@@ -199,7 +219,8 @@ def build_after_state(before, desired, state):
     return after
 
 
-def gather_lag_interfaces(module):
+def gather_lag_interfaces(module: "AnsibleModuleType") -> LagInterfaceState:
+    """Gather LAG interface facts required for idempotent diffing."""
     if not HAS_FACTS:
         module.fail_json(msg='LAG interface facts support is required for diffing')
         return {}
@@ -210,7 +231,7 @@ def gather_lag_interfaces(module):
         return {}
 
 
-def main():
+def main() -> None:
     module = AnsibleModule(
         argument_spec=dict(
             config=dict(

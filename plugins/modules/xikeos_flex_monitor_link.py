@@ -6,6 +6,8 @@
 from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
+from typing import Any, Mapping
+
 DOCUMENTATION = """
 module: xikeos_flex_monitor_link
 short_description: Manage Flex-Link and Monitor-Link on Xike OS devices
@@ -174,15 +176,15 @@ from ansible.module_utils.basic import AnsibleModule
 from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.lifecycle import exit_rendered_or_fail
 
 
-def _format_port(port_spec):
-    """Format a port specification dict to CLI string like 'eth 0/0/1' or 'eth-trunk 1'."""
+def _format_port(port_spec: Mapping[str, str] | None) -> str | None:
+    """Format a port spec into the CLI form used by link commands."""
     if not port_spec:
         return None
     return "{0} {1}".format(port_spec["type"], port_spec["id"])
 
 
-def get_commands(config, state):
-    """Generate CLI commands from Flex-Link/Monitor-Link configuration."""
+def get_commands(config: Mapping[str, Any], state: str) -> list[str]:
+    """Render Flex-Link and Monitor-Link CLI commands."""
     commands = []
 
     if state == "deleted":
@@ -233,8 +235,8 @@ def get_commands(config, state):
     return commands
 
 
-def main():
-    """Main entry point for the module."""
+def main() -> None:
+    """Run the Flex-Link and Monitor-Link module entry point."""
     port_spec_args = dict(
         type=dict(type="str", choices=["eth", "eth-trunk"], required=True),
         id=dict(type="str", required=True),

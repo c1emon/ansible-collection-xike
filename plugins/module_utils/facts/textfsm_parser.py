@@ -6,6 +6,8 @@
 from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
+from typing import Any
+
 import io
 import os
 
@@ -13,7 +15,11 @@ import os
 TEXTFSM_TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "textfsm_templates")
 
 
-def parse_textfsm_template(output, template_name, templates=None):
+def parse_textfsm_template(
+    output: str | None,
+    template_name: str,
+    templates: dict[str, str] | None = None,
+) -> list[dict[str, Any]]:
     """Parse command output with a bundled TextFSM template."""
     if not output:
         return []

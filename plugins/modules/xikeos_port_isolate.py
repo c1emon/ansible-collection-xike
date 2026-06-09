@@ -6,6 +6,8 @@
 from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
+from typing import Any, Mapping
+
 DOCUMENTATION = """
 module: xikeos_port_isolate
 short_description: Manage port isolation groups on Xike OS switches
@@ -92,8 +94,8 @@ from ansible.module_utils.basic import AnsibleModule
 from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.lifecycle import exit_rendered_or_fail
 
 
-def get_commands(config, state):
-    """Generate CLI commands from port isolation configuration."""
+def get_commands(config: Mapping[str, Any], state: str) -> list[str]:
+    """Render port-isolation CLI commands for the requested state."""
     commands = []
     group_id = config.get("group_id")
 
@@ -142,8 +144,8 @@ def get_commands(config, state):
     return commands
 
 
-def main():
-    """Main entry point for the module."""
+def main() -> None:
+    """Run the port isolation module entry point."""
     module_args = dict(
         config=dict(
             type="dict",

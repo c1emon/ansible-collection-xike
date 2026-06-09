@@ -6,6 +6,8 @@
 from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
+from typing import Any, Mapping
+
 DOCUMENTATION = """
 module: xikeos_qinq
 short_description: Manage QinQ configuration on Xike OS devices
@@ -158,8 +160,8 @@ from ansible.module_utils.basic import AnsibleModule
 from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.lifecycle import exit_rendered_or_fail
 
 
-def get_commands(config, state):
-    """Generate CLI commands from QinQ configuration."""
+def get_commands(config: Mapping[str, Any], state: str) -> list[str]:
+    """Render QinQ CLI commands for the requested state."""
     commands = []
 
     if state == "deleted":
@@ -221,8 +223,8 @@ def get_commands(config, state):
     return commands
 
 
-def main():
-    """Main entry point for the module."""
+def main() -> None:
+    """Run the QinQ module entry point."""
     module_args = dict(
         config=dict(
             type="dict",

@@ -115,6 +115,13 @@ commands:
 from ansible.module_utils.basic import AnsibleModule
 from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config
 from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.lifecycle import run_resource_module_lifecycle
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from ansible.module_utils.basic import AnsibleModule as AnsibleModuleType
+
+L2InterfaceConfig = dict[str, Any]
+L2InterfaceState = dict[str, L2InterfaceConfig]
 
 try:
     from ansible_collections.xike.xikeos.plugins.module_utils.facts.l2_interfaces import L2InterfacesFacts
@@ -123,7 +130,7 @@ except ImportError:
     HAS_FACTS = False
 
 
-def parse_vlan_str(vlan_str):
+def parse_vlan_str(vlan_str: object) -> str | None:
     """Parse VLAN string like '10,20,30' or 'all' into a normalized format."""
     if not vlan_str:
         return None
@@ -133,9 +140,13 @@ def parse_vlan_str(vlan_str):
     return vlan_str
 
 
-def build_commands(config, state, existing_config):
+def build_commands(
+    config: L2InterfaceConfig,
+    state: str,
+    existing_config: L2InterfaceState,
+) -> list[str]:
     """Build CLI commands from config, respecting link-type ordering."""
-    commands = []
+    commands: list[str] = []
     interface_name = config['name']
 
     # Get existing config for this interface
@@ -197,14 +208,24 @@ def build_commands(config, state, existing_config):
     return commands
 
 
-def build_lifecycle_commands(config_list, state, existing_config):
-    commands = []
+def build_lifecycle_commands(
+    config_list: list[L2InterfaceConfig],
+    state: str,
+    existing_config: L2InterfaceState,
+) -> list[str]:
+    """Build commands for all requested L2 interface configs."""
+    commands: list[str] = []
     for config in config_list:
         commands.extend(build_commands(config, state, existing_config))
     return commands
 
 
-def build_after_state(before, desired, state):
+def build_after_state(
+    before: L2InterfaceState,
+    desired: list[L2InterfaceConfig],
+    state: str,
+) -> L2InterfaceState:
+    """Build the expected normalized L2 interface state after lifecycle execution."""
     after = dict(before)
     if state == 'replaced':
         after = {}
@@ -215,7 +236,8 @@ def build_after_state(before, desired, state):
     return after
 
 
-def gather_l2_interfaces(module):
+def gather_l2_interfaces(module: "AnsibleModuleType") -> L2InterfaceState:
+    """Gather L2 interface facts required for idempotent diffing."""
     if not HAS_FACTS:
         module.fail_json(msg='L2 interface facts support is required for diffing')
         return {}
@@ -226,7 +248,7 @@ def gather_l2_interfaces(module):
         return {}
 
 
-def main():
+def main() -> None:
     module = AnsibleModule(
         argument_spec=dict(
             config=dict(

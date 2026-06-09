@@ -6,20 +6,31 @@ from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
 import re
+from typing import Any, Optional, TYPE_CHECKING
 
 from ansible.module_utils.common.text.converters import to_text
 from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.xikeos import run_commands
+
+if TYPE_CHECKING:
+    from ansible.module_utils.basic import AnsibleModule
+
+ACLRule = dict[str, Any]
+ACLRecord = dict[str, Any]
+ACLBinding = dict[str, Any]
 
 
 class AclsFacts(object):
     """Gather ACL facts from Xike OS devices."""
 
-    def __init__(self, module):
+    def __init__(self, module: "AnsibleModule") -> None:
         self.module = module
-        self.facts = {'acls': [], 'acl_bindings': []}
+        self.facts: dict[str, list[dict[str, Any]]] = {
+            'acls': [],
+            'acl_bindings': [],
+        }
         self._get_facts()
 
-    def _get_facts(self):
+    def _get_facts(self) -> None:
         """Parse ACL information.
 
         Executes 'show access-list config' and 'show access-list runtime'
@@ -36,7 +47,7 @@ class AclsFacts(object):
             self.module.fail_json(msg="failed to gather ACL facts: {0}".format(to_text(exc)))
 
 
-def parse_access_list_config(output):
+def parse_access_list_config(output: str) -> list[ACLRecord]:
     """
     Parse 'show access-list config' output.
 
@@ -65,7 +76,7 @@ def parse_access_list_config(output):
     access-list 1001 permit 0011.2233.4455 0000.0000.0000
     access-list 2001 permit ip 192.168.1.0 0.0.0.255 any
     """
-    acls = []
+    acls: list[ACLRecord] = []
     if not output:
         return acls
 
@@ -82,11 +93,11 @@ def parse_access_list_config(output):
     return acls
 
 
-def _parse_block_format(lines):
+def _parse_block_format(lines: list[str]) -> list[ACLRecord]:
     """Parse block-style ACL config output."""
-    acls = []
-    current_acl = None
-    current_rules = []
+    acls: list[ACLRecord] = []
+    current_acl: Optional[ACLRecord] = None
+    current_rules: list[ACLRule] = []
 
     for line in lines:
         stripped = line.strip()
@@ -138,9 +149,9 @@ def _parse_block_format(lines):
     return acls
 
 
-def _parse_inline_format(lines):
+def _parse_inline_format(lines: list[str]) -> list[ACLRecord]:
     """Parse inline 'access-list <id> ...' format."""
-    acl_map = {}
+    acl_map: dict[int, ACLRecord] = {}
 
     for line in lines:
         stripped = line.strip()
@@ -172,10 +183,10 @@ def _parse_inline_format(lines):
     return [acl_map[aid] for aid in sorted(acl_map.keys())]
 
 
-def _parse_generic_format(lines):
+def _parse_generic_format(lines: list[str]) -> list[ACLRecord]:
     """Parse generic format where rules are listed without clear ACL ID headers."""
-    acls = []
-    current_acl = None
+    acls: list[ACLRecord] = []
+    current_acl: Optional[ACLRecord] = None
 
     for line in lines:
         stripped = line.strip()
@@ -215,7 +226,7 @@ def _parse_generic_format(lines):
     return acls
 
 
-def _determine_acl_type(acl_id, description=''):
+def _determine_acl_type(acl_id: int, description: str = '') -> str:
     """Determine ACL type from ID range and/or description.
 
     Xike ACL numbering:
@@ -241,7 +252,7 @@ def _determine_acl_type(acl_id, description=''):
     return 'standard'
 
 
-def _parse_rule_line(line, acl_type):
+def _parse_rule_line(line: str, acl_type: str) -> Optional[ACLRule]:
     """Parse a rule line within a block format."""
     # Match: <seq> <action> <rest>
     match = re.match(r'^(\d+)?\s*(permit|deny)\s+(.*)', line, re.IGNORECASE)
@@ -254,9 +265,9 @@ def _parse_rule_line(line, acl_type):
     return _parse_rule_rest(action, rest, acl_type)
 
 
-def _parse_rule_rest(action, rest, acl_type):
+def _parse_rule_rest(action: str, rest: str, acl_type: str) -> Optional[ACLRule]:
     """Parse the remaining part of a rule after action keyword."""
-    parts = rest.split()
+    parts: list[str] = rest.split()
 
     if not parts:
         return None
@@ -316,7 +327,7 @@ def _parse_rule_rest(action, rest, acl_type):
     return rule
 
 
-def _looks_like_wildcard(token):
+def _looks_like_wildcard(token: str) -> bool:
     """Check if a token looks like a wildcard mask."""
     if token == '0.0.0.0':
         return True
@@ -326,7 +337,7 @@ def _looks_like_wildcard(token):
     return False
 
 
-def parse_access_list_runtime(output):
+def parse_access_list_runtime(output: str) -> list[ACLBinding]:
     """
     Parse 'show access-list runtime' output for ACL bindings.
 
@@ -341,7 +352,7 @@ def parse_access_list_runtime(output):
         IP ACL: 200
         MAC ACL: 2002
     """
-    bindings = []
+    bindings: list[ACLBinding] = []
     if not output:
         return bindings
 
@@ -382,7 +393,7 @@ def parse_access_list_runtime(output):
     return bindings
 
 
-def parse_running_config(config_text):
+def parse_running_config(config_text: str) -> dict[str, list[dict[str, Any]]]:
     """Parse ACL configuration from running-config output.
 
     Looks for lines like:
@@ -401,8 +412,8 @@ def parse_running_config(config_text):
     Returns:
         dict: {'acls': [...], 'acl_bindings': [...]}
     """
-    acl_map = {}
-    bindings = []
+    acl_map: dict[int, ACLRecord] = {}
+    bindings: list[ACLBinding] = []
 
     for line in config_text.splitlines():
         line = line.strip()

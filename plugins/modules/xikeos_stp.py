@@ -6,6 +6,8 @@
 from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
+from typing import Any, Mapping, Sequence
+
 DOCUMENTATION = """
 module: xikeos_stp
 short_description: Manage STP settings on Xike OS devices
@@ -165,8 +167,8 @@ from ansible.module_utils.basic import AnsibleModule
 from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.lifecycle import exit_rendered_or_fail
 
 
-def vlan_id_to_ranges(vlan_ids):
-    """Convert a list of VLAN IDs to compact range strings."""
+def vlan_id_to_ranges(vlan_ids: Sequence[int]) -> str:
+    """Convert VLAN IDs into the compact range strings used by STP."""
     if not vlan_ids:
         return ""
     sorted_ids = sorted(set(vlan_ids))
@@ -193,8 +195,8 @@ def vlan_id_to_ranges(vlan_ids):
     return ",".join(ranges)
 
 
-def get_commands(config, state):
-    """Generate CLI commands from STP configuration."""
+def get_commands(config: Mapping[str, Any], state: str) -> list[str]:
+    """Render STP CLI commands for the requested configuration state."""
     commands = []
 
     if not config:
@@ -276,8 +278,8 @@ def get_commands(config, state):
     return commands
 
 
-def main():
-    """Main entry point for the module."""
+def main() -> None:
+    """Run the STP module entry point."""
     module_args = dict(
         config=dict(
             type="dict",

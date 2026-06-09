@@ -6,6 +6,8 @@
 from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
+from typing import Any, Mapping
+
 DOCUMENTATION = """
 module: xikeos_eaps
 short_description: Manage EAPS (Ethernet Automatic Protection Switching) on Xike OS devices
@@ -111,8 +113,8 @@ from ansible.module_utils.basic import AnsibleModule
 from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.lifecycle import exit_rendered_or_fail
 
 
-def get_commands(config, state):
-    """Generate CLI commands from EAPS configuration."""
+def get_commands(config: Mapping[str, Any], state: str) -> list[str]:
+    """Render EAPS CLI commands for the requested configuration state."""
     commands = []
 
     domain_id = config.get("domain_id")
@@ -161,8 +163,8 @@ def get_commands(config, state):
     return commands
 
 
-def main():
-    """Main entry point for the module."""
+def main() -> None:
+    """Run the EAPS module entry point."""
     module_args = dict(
         domain_id=dict(
             type="int",

@@ -1,6 +1,8 @@
 from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
+from typing import Any
+
 DOCUMENTATION = """
 connection: xikeos
 short_description: Legacy Xike network_cli compatibility connection plugin
@@ -57,5 +59,6 @@ class Connection(NetworkCliConnection):
     # Prefer ansible_network_os=xike.xikeos.xikeos with ansible.netcommon.network_cli.
     DEFAULT_NETWORK_OS = 'xike.xikeos.xikeos'
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        """Initialize the compatibility wrapper."""
         super(Connection, self).__init__(*args, **kwargs)

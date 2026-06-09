@@ -107,6 +107,13 @@ commands:
 from ansible.module_utils.basic import AnsibleModule
 from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config
 from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.lifecycle import run_resource_module_lifecycle
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from ansible.module_utils.basic import AnsibleModule as AnsibleModuleType
+
+L3InterfaceConfig = dict[str, Any]
+L3InterfaceState = dict[str, L3InterfaceConfig]
 
 try:
     from ansible_collections.xike.xikeos.plugins.module_utils.facts.l3_interfaces import (
@@ -117,7 +124,7 @@ except ImportError:
     HAS_FACTS = False
 
 
-def build_commands(config, existing_config):
+def build_commands(config: L3InterfaceConfig, existing_config: L3InterfaceState) -> list[str]:
     """Build CLI commands for a single interface config entry.
 
     Args:
@@ -127,7 +134,7 @@ def build_commands(config, existing_config):
     Returns:
         list: CLI commands to apply
     """
-    commands = []
+    commands: list[str] = []
     interface_name = config['name']
     existing = existing_config.get(interface_name, {'ipv4': [], 'ipv6': []})
 
@@ -175,14 +182,24 @@ def build_commands(config, existing_config):
     return commands
 
 
-def build_lifecycle_commands(config_list, state, existing_config):
-    commands = []
+def build_lifecycle_commands(
+    config_list: list[L3InterfaceConfig],
+    state: str,
+    existing_config: L3InterfaceState,
+) -> list[str]:
+    """Build commands for all requested L3 interface configs."""
+    commands: list[str] = []
     for config in config_list:
         commands.extend(build_commands(config, existing_config))
     return commands
 
 
-def build_after_state(before, desired, state):
+def build_after_state(
+    before: L3InterfaceState,
+    desired: list[L3InterfaceConfig],
+    state: str,
+) -> L3InterfaceState:
+    """Build the expected normalized L3 interface state after lifecycle execution."""
     after = dict(before)
     if state == 'replaced':
         after = {}
@@ -194,7 +211,8 @@ def build_after_state(before, desired, state):
     return after
 
 
-def gather_l3_interfaces(module):
+def gather_l3_interfaces(module: "AnsibleModuleType") -> L3InterfaceState:
+    """Gather L3 interface facts required for idempotent diffing."""
     if not HAS_FACTS:
         module.fail_json(msg='L3 interface facts support is required for diffing')
         return {}
@@ -205,7 +223,7 @@ def gather_l3_interfaces(module):
         return {}
 
 
-def main():
+def main() -> None:
     module = AnsibleModule(
         argument_spec=dict(
             config=dict(

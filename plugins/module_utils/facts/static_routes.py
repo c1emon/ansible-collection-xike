@@ -6,20 +6,26 @@ from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
 import re
+from typing import Any, Optional, TYPE_CHECKING
 
 from ansible.module_utils.common.text.converters import to_text
 from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.xikeos import run_commands
+
+if TYPE_CHECKING:
+    from ansible.module_utils.basic import AnsibleModule
+
+RouteRecord = dict[str, Any]
 
 
 class StaticRoutesFacts(object):
     """Gather static route facts from Xike OS devices."""
 
-    def __init__(self, module):
+    def __init__(self, module: "AnsibleModule") -> None:
         self.module = module
-        self.facts = {'static_routes': []}
+        self.facts: dict[str, list[RouteRecord]] = {'static_routes': []}
         self._get_facts()
 
-    def _get_facts(self):
+    def _get_facts(self) -> None:
         """Parse static route information.
 
         Executes 'show ip route' on the device and parses static routes.
@@ -36,7 +42,7 @@ class StaticRoutesFacts(object):
             self.module.fail_json(msg="failed to gather static route facts: {0}".format(to_text(exc)))
 
 
-def parse_show_ip_route(output, route_type='ipv4'):
+def parse_show_ip_route(output: str, route_type: str = 'ipv4') -> list[RouteRecord]:
     """
     Parse 'show ip route' or 'show ipv6 route' output.
 
@@ -59,7 +65,7 @@ def parse_show_ip_route(output, route_type='ipv4'):
     S    ::/0 [1/0] via fe80::1, Vlan10
     S    2001:db8::/32 [1/0] via 2001:db8::1
     """
-    routes = []
+    routes: list[RouteRecord] = []
     if not output:
         return routes
 
@@ -83,9 +89,9 @@ def parse_show_ip_route(output, route_type='ipv4'):
     return simple_routes
 
 
-def _parse_table_format(lines, route_type):
+def _parse_table_format(lines: list[str], route_type: str) -> list[RouteRecord]:
     """Parse table-style 'show ip route' output."""
-    routes = []
+    routes: list[RouteRecord] = []
     header_found = False
 
     for line in lines:
@@ -115,9 +121,9 @@ def _parse_table_format(lines, route_type):
     return routes
 
 
-def _parse_cisco_style(lines, route_type):
+def _parse_cisco_style(lines: list[str], route_type: str) -> list[RouteRecord]:
     """Parse Cisco-style 'S ... via ...' output."""
-    routes = []
+    routes: list[RouteRecord] = []
 
     # Pattern: S    192.168.1.0/24 [60/0] via 10.0.0.1
     # Pattern: S    0.0.0.0/0 [1/0] via 10.0.0.1, Vlan10
@@ -150,9 +156,9 @@ def _parse_cisco_style(lines, route_type):
     return routes
 
 
-def _parse_simple_format(lines, route_type):
+def _parse_simple_format(lines: list[str], route_type: str) -> list[RouteRecord]:
     """Parse simple route format with 'Static' keyword."""
-    routes = []
+    routes: list[RouteRecord] = []
 
     for line in lines:
         stripped = line.strip()
@@ -166,7 +172,7 @@ def _parse_simple_format(lines, route_type):
     return routes
 
 
-def _parse_route_line(line, route_type):
+def _parse_route_line(line: str, route_type: str) -> Optional[RouteRecord]:
     """Parse a single route data line."""
     # Try to match various formats:
     # 1. 0.0.0.0/0 Static 60 0 10.0.0.1 Vlan10
@@ -239,7 +245,7 @@ def _parse_route_line(line, route_type):
     }
 
 
-def _split_dest_mask(dest_mask):
+def _split_dest_mask(dest_mask: str) -> tuple[str, str]:
     """Split destination/mask into separate destination and mask.
 
     Handles formats:
@@ -270,7 +276,7 @@ def _split_dest_mask(dest_mask):
     return dest_mask, ''
 
 
-def _prefix_to_ipv4_mask(prefix_len):
+def _prefix_to_ipv4_mask(prefix_len: int) -> str:
     """Convert CIDR prefix length to dotted-decimal mask."""
     if prefix_len == 0:
         return '0.0.0.0'
@@ -281,7 +287,7 @@ def _prefix_to_ipv4_mask(prefix_len):
     return '.'.join(str((mask_bits >> (8 * i)) & 0xFF) for i in range(3, -1, -1))
 
 
-def _is_ipv4(addr):
+def _is_ipv4(addr: str) -> bool:
     """Check if an address looks like IPv4."""
     parts = addr.split('.')
     if len(parts) != 4:
@@ -289,7 +295,7 @@ def _is_ipv4(addr):
     return all(p.isdigit() and 0 <= int(p) <= 255 for p in parts)
 
 
-def _looks_like_ip(addr):
+def _looks_like_ip(addr: str) -> bool:
     """Check if a string looks like an IP address."""
     if ':' in addr:
         # IPv6
@@ -300,7 +306,7 @@ def _looks_like_ip(addr):
     return False
 
 
-def _looks_like_network(net):
+def _looks_like_network(net: str) -> bool:
     """Check if a string looks like a network destination."""
     if '/' in net:
         parts = net.rsplit('/', 1)
@@ -313,7 +319,7 @@ def _looks_like_network(net):
     return False
 
 
-def parse_running_config(config_text, route_type='ipv4'):
+def parse_running_config(config_text: str, route_type: str = 'ipv4') -> list[RouteRecord]:
     """Parse static routes from running-config output.
 
     Looks for lines like:
@@ -328,7 +334,7 @@ def parse_running_config(config_text, route_type='ipv4'):
     Returns:
         list: Parsed static route entries
     """
-    routes = []
+    routes: list[RouteRecord] = []
 
     for line in config_text.splitlines():
         line = line.strip()

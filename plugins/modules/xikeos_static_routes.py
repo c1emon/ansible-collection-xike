@@ -159,6 +159,10 @@ commands:
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config
+from typing import Any
+
+RouteConfig = dict[str, Any]
+RouteKey = tuple[Any, Any, Any]
 
 try:
     from ansible_collections.xike.xikeos.plugins.module_utils.facts.static_routes import (
@@ -174,7 +178,7 @@ MIN_DISTANCE = 1
 MAX_DISTANCE = 255
 
 
-def normalize_route(route):
+def normalize_route(route: RouteConfig) -> RouteConfig:
     """Normalize a route entry for comparison.
 
     Ensures consistent format for mask (CIDR for IPv6, dotted-decimal for IPv4).
@@ -200,7 +204,7 @@ def normalize_route(route):
     return normalized
 
 
-def route_key(route):
+def route_key(route: RouteConfig) -> RouteKey:
     """Generate a unique key for a route entry."""
     r = normalize_route(route)
     return (
@@ -210,7 +214,10 @@ def route_key(route):
     )
 
 
-def build_static_route_commands(config, existing_routes):
+def build_static_route_commands(
+    config: list[RouteConfig],
+    existing_routes: list[RouteConfig],
+) -> list[str]:
     """Build CLI commands for static route configuration.
 
     Args:
@@ -220,10 +227,10 @@ def build_static_route_commands(config, existing_routes):
     Returns:
         list: CLI commands to apply
     """
-    commands = []
+    commands: list[str] = []
 
     # Normalize existing routes for comparison
-    existing_by_key = {}
+    existing_by_key: dict[RouteKey, RouteConfig] = {}
     for route in existing_routes:
         key = route_key(route)
         existing_by_key[key] = route
@@ -260,7 +267,10 @@ def build_static_route_commands(config, existing_routes):
     return commands
 
 
-def build_delete_commands(config, existing_routes):
+def build_delete_commands(
+    config: list[RouteConfig],
+    existing_routes: list[RouteConfig],
+) -> list[str]:
     """Build CLI commands to delete static routes.
 
     Args:
@@ -270,10 +280,10 @@ def build_delete_commands(config, existing_routes):
     Returns:
         list: CLI commands to apply
     """
-    commands = []
+    commands: list[str] = []
 
     # Create set of routes to delete
-    delete_keys = set()
+    delete_keys: set[RouteKey] = set()
     for route in config:
         delete_keys.add(route_key(route))
 
@@ -306,7 +316,7 @@ def build_delete_commands(config, existing_routes):
     return commands
 
 
-def _build_no_route_cmd(route_type, destination, mask, next_hop):
+def _build_no_route_cmd(route_type: str, destination: str, mask: str, next_hop: str) -> str | None:
     """Build a 'no ip/ipv6 route' command."""
     if route_type == 'ipv4':
         return 'no ip route {0} {1} {2}'.format(destination, mask, next_hop)
@@ -319,12 +329,15 @@ def _build_no_route_cmd(route_type, destination, mask, next_hop):
     return None
 
 
-def build_replaced_commands(config, existing_routes):
+def build_replaced_commands(
+    config: list[RouteConfig],
+    existing_routes: list[RouteConfig],
+) -> list[str]:
     """Build CLI commands for 'replaced' state.
 
     Removes all existing static routes and adds the desired ones.
     """
-    commands = []
+    commands: list[str] = []
 
     # First, delete all existing routes
     for route in existing_routes:
@@ -343,7 +356,11 @@ def build_replaced_commands(config, existing_routes):
     return commands
 
 
-def build_after_state(before, desired, state):
+def build_after_state(
+    before: list[RouteConfig],
+    desired: list[RouteConfig],
+    state: str,
+) -> list[RouteConfig]:
     """Build a normalized simulated after-state for static route lifecycle results."""
     after_by_key = {route_key(route): normalize_route(route) for route in before}
 
@@ -364,7 +381,7 @@ def build_after_state(before, desired, state):
     return [after_by_key[key] for key in sorted(after_by_key)]
 
 
-def prefix_to_ipv4_mask(prefix_len):
+def prefix_to_ipv4_mask(prefix_len: int) -> str:
     """Convert CIDR prefix length to dotted-decimal mask."""
     if prefix_len == 0:
         return '0.0.0.0'
@@ -375,7 +392,7 @@ def prefix_to_ipv4_mask(prefix_len):
     return '.'.join(str((mask_bits >> (8 * i)) & 0xFF) for i in range(3, -1, -1))
 
 
-def ipv4_mask_to_prefix(mask):
+def ipv4_mask_to_prefix(mask: str) -> int:
     """Convert dotted-decimal mask to CIDR prefix length. Returns -1 on failure."""
     try:
         parts = mask.split('.')
@@ -401,7 +418,7 @@ def ipv4_mask_to_prefix(mask):
         return -1
 
 
-def main():
+def main() -> None:
     """Main entry point for the module."""
     module_args = dict(
         config=dict(
