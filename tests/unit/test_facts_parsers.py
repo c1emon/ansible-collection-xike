@@ -3,6 +3,9 @@
 from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
+import sys
+import types
+
 import pytest
 
 # Import parsers directly (no device connection needed)
@@ -12,6 +15,10 @@ from ansible_collections.xike.xikeos.plugins.module_utils.facts.vlans import (
 )
 from ansible_collections.xike.xikeos.plugins.module_utils.facts.textfsm_parser import (
     parse_textfsm_template,
+)
+from ansible_collections.xike.xikeos.plugins.module_utils.facts.ttp_parser import (
+    _load_ttp_template,
+    parse_ttp_template,
 )
 from ansible_collections.xike.xikeos.plugins.module_utils.facts.interfaces import (
     parse_interface_brief,
@@ -209,8 +216,72 @@ VLAN Name         Type       Media     Ports
         assert result[5]["ports"][-1] == {"name": "Ethernet1/0/8", "tagged": False}
 
     def test_textfsm_helper_missing_template_error_is_actionable(self):
-        with pytest.raises(FileNotFoundError, match="Bundled TextFSM template 'missing.textfsm' was not found"):
+        with pytest.raises(FileNotFoundError, match="Bundled TextFSM template 'missing.textfsm' was not injected and was not found"):
             parse_textfsm_template(self.SAMPLE_OUTPUT, "missing.textfsm")
+
+    def test_textfsm_helper_uses_injected_template_when_local_file_is_unavailable(self):
+        expected_template = "value VLAN_ID (\\d+)\nvalue NAME (\\S+)\n\nstart\n  ^${VLAN_ID} ${NAME} -> Record"
+        expected_output = self.SAMPLE_OUTPUT
+
+        class FakeTextFSM:
+            def __init__(self, template_file):
+                self.template = template_file.read()
+                self.header = ["VLAN_ID", "NAME"]
+
+            def ParseText(self, output):
+                assert output == expected_output
+                assert self.template == expected_template
+                return [["10", "dev"]]
+
+        fake_textfsm = types.SimpleNamespace(TextFSM=FakeTextFSM)
+
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setitem(sys.modules, "textfsm", fake_textfsm)
+            mp.setattr("ansible_collections.xike.xikeos.plugins.module_utils.facts.textfsm_parser.os.path.isfile", lambda *_: False)
+            result = parse_textfsm_template(
+                self.SAMPLE_OUTPUT,
+                "show_vlan.textfsm",
+                templates={
+                    "show_vlan.textfsm": expected_template,
+                },
+            )
+
+        assert result == [{"vlan_id": "10", "name": "dev"}]
+
+    def test_ttp_helper_uses_injected_template_and_missing_template_is_actionable(self):
+        assert _load_ttp_template("show_vlan.ttp", templates={"show_vlan.ttp": "template contents"}) == "template contents"
+
+        with pytest.raises(FileNotFoundError, match="Bundled TTP template 'missing.ttp' was not injected and was not found"):
+            with pytest.MonkeyPatch.context() as mp:
+                mp.setattr("ansible_collections.xike.xikeos.plugins.module_utils.facts.ttp_parser.os.path.isfile", lambda *_: False)
+                _load_ttp_template("missing.ttp")
+
+    def test_ttp_parser_accepts_injected_template_without_local_file(self):
+        class FakeTTP:
+            def __init__(self, data, template):
+                self.data = data
+                self.template = template
+                self._result = [[{"vlans": [{"vlan_id": 10, "name": "dev"}]}]]
+
+            def parse(self, one=True):
+                assert one is True
+                assert self.template == "template contents"
+
+            def result(self):
+                return self._result
+
+        fake_ttp_module = types.SimpleNamespace(ttp=FakeTTP)
+
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setitem(sys.modules, "ttp", fake_ttp_module)
+            result = parse_ttp_template(
+                "show vlan output",
+                "show_vlan.ttp",
+                result_key="vlans",
+                templates={"show_vlan.ttp": "template contents"},
+            )
+
+        assert result == [{"vlan_id": 10, "name": "dev"}]
 
     def test_parse_show_vlan_multiline_real_output(self):
         output = """\

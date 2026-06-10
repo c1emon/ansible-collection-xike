@@ -105,6 +105,15 @@ commands:
 """
 
 from ansible.module_utils.basic import AnsibleModule
+from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config
+from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.lifecycle import run_resource_module_lifecycle
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from ansible.module_utils.basic import AnsibleModule as AnsibleModuleType
+
+L3InterfaceConfig = dict[str, Any]
+L3InterfaceState = dict[str, L3InterfaceConfig]
 
 try:
     from ansible_collections.xike.xikeos.plugins.module_utils.facts.l3_interfaces import (
@@ -115,7 +124,7 @@ except ImportError:
     HAS_FACTS = False
 
 
-def build_commands(config, existing_config):
+def build_commands(config: L3InterfaceConfig, existing_config: L3InterfaceState) -> list[str]:
     """Build CLI commands for a single interface config entry.
 
     Args:
@@ -125,7 +134,7 @@ def build_commands(config, existing_config):
     Returns:
         list: CLI commands to apply
     """
-    commands = []
+    commands: list[str] = []
     interface_name = config['name']
     existing = existing_config.get(interface_name, {'ipv4': [], 'ipv6': []})
 
@@ -173,7 +182,48 @@ def build_commands(config, existing_config):
     return commands
 
 
-def main():
+def build_lifecycle_commands(
+    config_list: list[L3InterfaceConfig],
+    state: str,
+    existing_config: L3InterfaceState,
+) -> list[str]:
+    """Build commands for all requested L3 interface configs."""
+    commands: list[str] = []
+    for config in config_list:
+        commands.extend(build_commands(config, existing_config))
+    return commands
+
+
+def build_after_state(
+    before: L3InterfaceState,
+    desired: list[L3InterfaceConfig],
+    state: str,
+) -> L3InterfaceState:
+    """Build the expected normalized L3 interface state after lifecycle execution."""
+    after = dict(before)
+    if state == 'replaced':
+        after = {}
+    for config in desired:
+        current = dict(after.get(config['name'], {'ipv4': [], 'ipv6': []}))
+        current['ipv4'] = list(config.get('ipv4') or [])
+        current['ipv6'] = list(config.get('ipv6') or [])
+        after[config['name']] = current
+    return after
+
+
+def gather_l3_interfaces(module: "AnsibleModuleType") -> L3InterfaceState:
+    """Gather L3 interface facts required for idempotent diffing."""
+    if not HAS_FACTS:
+        module.fail_json(msg='L3 interface facts support is required for diffing')
+        return {}
+    try:
+        return L3InterfacesFacts(module).get_facts()
+    except Exception as exc:
+        module.fail_json(msg='failed to gather L3 interface facts: {0}'.format(exc))
+        return {}
+
+
+def main() -> None:
     module = AnsibleModule(
         argument_spec=dict(
             config=dict(
@@ -210,39 +260,18 @@ def main():
     config_list = module.params.get('config', []) or []
     state = module.params.get('state', 'merged')
 
-    # Gather existing facts
-    if HAS_FACTS:
-        facts = L3InterfacesFacts(module)
-        existing_config = facts.get_facts()
-    else:
-        existing_config = {}
-
-    result = {
-        'changed': False,
-        'commands': [],
-        'before': existing_config,
-    }
-
-    all_commands = []
-
-    if state == 'merged':
-        for config in config_list:
-            commands = build_commands(config, existing_config)
-            all_commands.extend(commands)
-    elif state == 'replaced':
-        for config in config_list:
-            commands = build_commands(config, existing_config)
-            all_commands.extend(commands)
-
-    result['commands'] = all_commands
-
-    if module.check_mode:
-        module.exit_json(**result)
-
-    result['changed'] = bool(all_commands)
-    result['after'] = existing_config
-
-    module.exit_json(**result)
+    run_resource_module_lifecycle(
+        module=module,
+        config=config_list,
+        state=state,
+        gather=gather_l3_interfaces,
+        build_commands=build_lifecycle_commands,
+        build_after=build_after_state,
+        mutating_states=('merged', 'replaced'),
+        rendered_states=(),
+        apply_config=load_config,
+        gather_after_apply=True,
+    )
 
 
 if __name__ == '__main__':

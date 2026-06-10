@@ -6,6 +6,8 @@
 from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
+from typing import Any
+
 import re
 
 from ansible_collections.xike.xikeos.plugins.module_utils.xikeos import (
@@ -13,7 +15,7 @@ from ansible_collections.xike.xikeos.plugins.module_utils.xikeos import (
 )
 
 
-def parse_eaps_brief(output):
+def parse_eaps_brief(output: str | None) -> dict[str, list[dict[str, Any]]]:
     """
     Parse 'show eaps' output and return EAPS facts.
 
@@ -24,7 +26,10 @@ def parse_eaps_brief(output):
     1       100           Standard    Active
     2       200           RRPP        Active
     """
-    facts = {"domains": []}
+    facts: dict[str, list[dict[str, Any]]] = {"domains": []}
+
+    if output is None or output == "":
+        return facts
 
     lines = output.strip().split("\n")
 
@@ -58,7 +63,7 @@ def parse_eaps_brief(output):
     return facts
 
 
-def parse_eaps_topology(output):
+def parse_eaps_topology(output: str | None) -> dict[str, list[dict[str, Any]]]:
     """
     Parse 'show eaps topology' output and return EAPS topology facts.
 
@@ -69,12 +74,15 @@ def parse_eaps_topology(output):
     1       2     Transit   Eth1/0/3      Eth1/0/4      Active    Yes
     2       1     Master    Eth-Trunk1    Eth-Trunk2    Active    No
     """
-    facts = {"domains": []}
+    facts: dict[str, list[dict[str, Any]]] = {"domains": []}
+
+    if output is None or output == "":
+        return facts
 
     lines = output.strip().split("\n")
 
     # Temporary structure to group rings by domain
-    domain_rings = {}
+    domain_rings: dict[int, list[dict[str, Any]]] = {}
 
     for line in lines:
         stripped = line.strip()
@@ -122,7 +130,7 @@ def parse_eaps_topology(output):
     return facts
 
 
-def parse_eaps_domain_detail(output, domain_id):
+def parse_eaps_domain_detail(output: str | None, domain_id: int) -> dict[str, Any]:
     """
     Parse detailed EAPS domain info.
 
@@ -133,7 +141,10 @@ def parse_eaps_domain_detail(output, domain_id):
     Ring 1: Enabled, Master, Eth1/0/1 -> Eth1/0/2, Active
     Ring 2: Enabled, Transit, Eth1/0/3 -> Eth1/0/4, Active
     """
-    facts = {"domain_id": domain_id}
+    facts: dict[str, Any] = {"domain_id": domain_id}
+
+    if output is None or output == "":
+        return facts
 
     lines = output.strip().split("\n")
 
@@ -177,7 +188,7 @@ def parse_eaps_domain_detail(output, domain_id):
     return facts
 
 
-def get_facts(facts_module, connection):
+def get_facts(facts_module: Any, connection: Any) -> dict[str, dict[str, Any]]:
     """
     Get EAPS facts from the device.
 
@@ -188,7 +199,7 @@ def get_facts(facts_module, connection):
     Returns:
         dict: EAPS facts
     """
-    eaps_facts = {}
+    eaps_facts: dict[str, Any] = {}
 
     # Get EAPS brief info
     try:
@@ -208,7 +219,7 @@ def get_facts(facts_module, connection):
 
     # Get detailed info for each domain
     domains = eaps_facts.get("domains", [])
-    detailed_domains = []
+    detailed_domains: list[dict[str, Any]] = []
     for domain in domains:
         domain_id = domain.get("domain_id")
         if domain_id is not None:

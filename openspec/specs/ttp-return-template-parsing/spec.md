@@ -4,7 +4,7 @@ Define the internal template-backed parsing behavior for converting Xike OS comm
 ## Requirements
 
 ### Requirement: Bundled templates parse internal command output
-The collection SHALL support internal facts parsers that parse Xike OS command output using collection-bundled templates.
+The collection SHALL support internal facts parsers that parse Xike OS command output using collection-bundled templates. At module runtime, parser templates SHALL be supplied by controller-side injection when the module is executed through an action plugin, with local template files used only for local development and unit-test paths.
 
 #### Scenario: VLAN output is parsed with a bundled template
 - **WHEN** the VLAN facts parser receives `show vlan` command output
@@ -13,6 +13,10 @@ The collection SHALL support internal facts parsers that parse Xike OS command o
 #### Scenario: Parser handles empty command output
 - **WHEN** the VLAN facts parser receives empty command output
 - **THEN** it MUST return an empty VLAN list without raising an error.
+
+#### Scenario: Injected template content is preferred
+- **WHEN** injected template content is provided for a parser template name
+- **THEN** the parser helper MUST use the injected template content instead of reading a template file from the module runtime filesystem.
 
 ### Requirement: Template parser results preserve existing facts contracts
 Internal template-based parsers SHALL normalize parsed template results into the same return contracts that existing facts and resource modules consume.

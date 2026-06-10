@@ -6,6 +6,8 @@
 from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
+from typing import Any, Mapping
+
 DOCUMENTATION = """
 module: xikeos_qinq
 short_description: Manage QinQ configuration on Xike OS devices
@@ -91,7 +93,7 @@ options:
       - C(replaced) - Replaces existing QinQ configuration with specified config.
       - C(deleted) - Removes QinQ configuration.
     type: str
-    choices: ['merged', 'replaced', 'deleted']
+    choices: ['merged', 'replaced', 'deleted', 'rendered']
     default: merged
 author: Andy
 """
@@ -155,10 +157,11 @@ commands:
 """
 
 from ansible.module_utils.basic import AnsibleModule
+from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.lifecycle import exit_rendered_or_fail
 
 
-def get_commands(config, state):
-    """Generate CLI commands from QinQ configuration."""
+def get_commands(config: Mapping[str, Any], state: str) -> list[str]:
+    """Render QinQ CLI commands for the requested state."""
     commands = []
 
     if state == "deleted":
@@ -220,8 +223,8 @@ def get_commands(config, state):
     return commands
 
 
-def main():
-    """Main entry point for the module."""
+def main() -> None:
+    """Run the QinQ module entry point."""
     module_args = dict(
         config=dict(
             type="dict",
@@ -268,7 +271,7 @@ def main():
         ),
         state=dict(
             type="str",
-            choices=["merged", "replaced", "deleted"],
+            choices=["merged", "replaced", "deleted", "rendered"],
             default="merged",
         ),
     )
@@ -281,27 +284,7 @@ def main():
     config = module.params.get("config")
     state = module.params.get("state", "merged")
 
-    result = {
-        "changed": False,
-        "commands": [],
-    }
-
-    if state == "deleted":
-        commands = get_commands(config, state)
-    elif not config:
-        module.exit_json(**result)
-    else:
-        commands = get_commands(config, state)
-
-    result["commands"] = commands
-
-    if module.check_mode:
-        module.exit_json(**result)
-
-    if commands:
-        result["changed"] = True
-
-    module.exit_json(**result)
+    exit_rendered_or_fail(module, "xikeos_qinq", config, state, get_commands, "merged")
 
 
 if __name__ == "__main__":

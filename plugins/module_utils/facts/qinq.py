@@ -3,6 +3,8 @@
 from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
+from typing import Any
+
 import re
 
 from ansible_collections.xike.xikeos.plugins.module_utils.xikeos import (
@@ -10,13 +12,13 @@ from ansible_collections.xike.xikeos.plugins.module_utils.xikeos import (
 )
 
 
-def parse_qinq_output(output):
+def parse_qinq_output(output: str | None) -> dict[str, Any]:
     """
     Parse 'show qinq' output and return QinQ facts.
 
     Returns a dict with mode, inner_tpid, outer_tpid, and VLAN rules.
     """
-    facts = {
+    facts: dict[str, Any] = {
         "mode": None,
         "inner_tpid": None,
         "outer_tpid": None,
@@ -25,7 +27,7 @@ def parse_qinq_output(output):
         "vlan_swaps": [],
     }
 
-    if not output:
+    if output is None or output == "":
         return facts
 
     lines = output.strip().split("\n")
@@ -102,7 +104,7 @@ def parse_qinq_output(output):
     return facts
 
 
-def get_facts(connection):
+def get_facts(connection: Any) -> dict[str, dict[str, Any]]:
     """
     Get QinQ facts from the device.
 
