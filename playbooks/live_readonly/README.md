@@ -24,12 +24,12 @@ inventory that defines the `xike_switches` group.
 ## Run commands
 
 When running directly from this source checkout, expose it as a local Ansible
-collection first:
+collection under `.test_path` first:
 
 ```bash
-mkdir -p /tmp/xikeos-collections/ansible_collections/xike
-ln -sfn "$PWD" /tmp/xikeos-collections/ansible_collections/xike/xikeos
-export ANSIBLE_COLLECTIONS_PATH=/tmp/xikeos-collections
+mkdir -p .test_path/ansible_collections/xike
+ln -sfn "$PWD" .test_path/ansible_collections/xike/xikeos
+export ANSIBLE_COLLECTIONS_PATH=.test_path
 ```
 
 ```bash
