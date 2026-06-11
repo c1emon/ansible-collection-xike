@@ -17,7 +17,7 @@ tags:
   - xike
   - network
   - switch
-  - cisco-like
+  - cisco_like
   - hybrid
   - ethernet
 build_ignore:
