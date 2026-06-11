@@ -3,10 +3,12 @@
 from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
+from typing import Any
+
 import re
 
 
-def parse_port_isolate_group(output):
+def parse_port_isolate_group(output: str | None) -> list[dict[str, Any]]:
     """
     Parse 'show port-isolate group' output and return port isolation facts.
 
@@ -87,7 +89,11 @@ def parse_port_isolate_group(output):
     return groups
 
 
-def get_facts(facts_module, connection, command="show port-isolate group"):
+def get_facts(
+    facts_module: Any,
+    connection: Any,
+    command: str = "show port-isolate group",
+) -> dict[str, list[dict[str, Any]]]:
     """
     Get port isolation group facts from the device.
 

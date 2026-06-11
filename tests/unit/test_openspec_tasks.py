@@ -4,33 +4,77 @@ from __future__ import absolute_import, division, print_function
 
 __metaclass__ = type
 
+import ast
 import json
+from pathlib import Path
 from unittest.mock import Mock, call, patch
 
 import pytest
 
 from ansible_collections.xike.xikeos.plugins.cliconf import xikeos as cliconf_module
 from ansible_collections.xike.xikeos.plugins.cliconf.xikeos import Cliconf
+from ansible_collections.xike.xikeos.plugins.action import xikeos_vlans as action_vlans_module
 from ansible_collections.xike.xikeos.plugins.modules import (
     xikeos_command as command_module,
+    xikeos_acls as acls_module,
     xikeos_config as config_module,
+    xikeos_eaps as eaps_module,
+    xikeos_erps as erps_module,
+    xikeos_flex_monitor_link as flex_monitor_link_module,
+    xikeos_interfaces as interfaces_module,
+    xikeos_l2_interfaces as l2_interfaces_module,
+    xikeos_l3_interfaces as l3_interfaces_module,
+    xikeos_lag_interfaces as lag_interfaces_module,
+    xikeos_mirror as mirror_module,
+    xikeos_ospfv2 as ospfv2_module,
+    xikeos_port_isolate as port_isolate_module,
+    xikeos_qinq as qinq_module,
+    xikeos_static_routes as static_routes_module,
+    xikeos_stp as stp_module,
     xikeos_vlans as vlans_module,
 )
 from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos import xikeos as network_utils
 from ansible_collections.xike.xikeos.plugins.terminal.xikeos import TerminalModule
 
-
-class ExitJson(Exception):
-    pass
+from .lifecycle_helpers import ExitJson, fake_module
 
 
 def _fake_module(params, check_mode=False):
-    module = Mock()
-    module.params = params
-    module.check_mode = check_mode
-    module.exit_json.side_effect = ExitJson
-    module.fail_json.side_effect = AssertionError("fail_json should not be called")
-    return module
+    return fake_module(params, check_mode=check_mode)
+
+
+RESOURCE_MODULES_DIR = Path(__file__).resolve().parents[2] / "plugins" / "modules"
+RESOURCE_MODULE_NAMES = {
+    "xikeos_acls.py",
+    "xikeos_eaps.py",
+    "xikeos_erps.py",
+    "xikeos_flex_monitor_link.py",
+    "xikeos_interfaces.py",
+    "xikeos_l2_interfaces.py",
+    "xikeos_l3_interfaces.py",
+    "xikeos_lag_interfaces.py",
+    "xikeos_mirror.py",
+    "xikeos_ospfv2.py",
+    "xikeos_port_isolate.py",
+    "xikeos_qinq.py",
+    "xikeos_static_routes.py",
+    "xikeos_stp.py",
+    "xikeos_vlans.py",
+}
+
+
+def test_resource_modules_do_not_use_local_run_command_for_device_configuration():
+    offenders = []
+    for module_path in sorted(RESOURCE_MODULES_DIR.glob("xikeos_*.py")):
+        if module_path.name not in RESOURCE_MODULE_NAMES:
+            continue
+        tree = ast.parse(module_path.read_text())
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "run_command":
+                if isinstance(node.func.value, ast.Name) and node.func.value.id == "module":
+                    offenders.append("{0}:{1}".format(module_path.name, node.lineno))
+
+    assert offenders == []
 
 
 def test_terminal_regexes_and_open_shell_calls():
@@ -140,7 +184,7 @@ def test_network_get_config_uses_flags_and_returns_text():
 
 
 def test_xikeos_command_stdout_and_lines():
-    module = _fake_module({"commands": ["show version", "show vlan brief"]})
+    module = _fake_module({"commands": ["show version", "show vlan"]})
     with patch.object(command_module, "AnsibleModule", return_value=module), patch.object(
         command_module, "run_commands", return_value=[b"line1\nline2", "single"]
     ):
@@ -148,7 +192,7 @@ def test_xikeos_command_stdout_and_lines():
             command_module.main()
 
     result = module.exit_json.call_args.kwargs
-    assert result["commands"] == ["show version", "show vlan brief"]
+    assert result["commands"] == ["show version", "show vlan"]
     assert result["stdout"] == ["line1\nline2", "single"]
     assert result["stdout_lines"] == [["line1", "line2"], ["single"]]
     assert result["changed"] is False
@@ -262,19 +306,41 @@ def test_xikeos_vlans_normalize_and_lifecycle():
     assert check_mode.exit_json.call_args.kwargs["commands"] == ["vlan 300", "description NEW", "exit"]
     load_mock.assert_not_called()
 
+    gathered = _fake_module({"config": None, "state": "gathered"})
+    gathered_vlans = [{"vlan_id": 10, "name": "dev", "state": "active", "ports": [{"name": "Ethernet1/0/3", "tagged": True}]}]
+    with patch.object(vlans_module, "AnsibleModule", return_value=gathered), patch.object(
+        vlans_module, "gather_vlans", return_value=gathered_vlans
+    ), patch.object(vlans_module, "load_config") as load_mock:
+        with pytest.raises(ExitJson):
+            vlans_module.main()
+
+    assert gathered.exit_json.call_args.kwargs == {"changed": False, "gathered": gathered_vlans}
+    load_mock.assert_not_called()
+
 
 def test_xikeos_vlans_gather_vlans_decodes_bytes_and_reports_failures():
     module = Mock()
+    module.params = {}
     module.fail_json.side_effect = RuntimeError("gather failed")
 
-    def _parse_vlan_brief(output):
-        assert isinstance(output, str)
-        return [{"vlan_id": 10, "name": "DATA", "state": "active", "ports": []}]
-
-    with patch.object(vlans_module, "run_commands", return_value=[b"VLAN Name\n10  DATA  active"]), patch.object(
-        vlans_module, "parse_vlan_brief", side_effect=_parse_vlan_brief
-    ):
-        assert vlans_module.gather_vlans(module) == [{"vlan_id": 10, "name": "DATA", "state": "active", "ports": []}]
+    output = b"""VLAN Name         Type       Media     Ports
+---- ------------ ---------- --------- ----------------------------------------
+10   DATA         Static     ENET      Ethernet1/0/1       Ethernet1/0/2(T)
+"""
+    with patch.object(vlans_module, "run_commands", return_value=[output]):
+        assert vlans_module.gather_vlans(module) == [
+            {
+                "vlan_id": 10,
+                "name": "DATA",
+                "state": "active",
+                "ports": [
+                    {"name": "Ethernet1/0/1", "tagged": False},
+                    {"name": "Ethernet1/0/2", "tagged": True},
+                ],
+                "type": "Static",
+                "media": "ENET",
+            }
+        ]
 
     failing = Mock()
     failing.fail_json.side_effect = RuntimeError("gather failed")
@@ -282,5 +348,261 @@ def test_xikeos_vlans_gather_vlans_decodes_bytes_and_reports_failures():
         with pytest.raises(RuntimeError, match="gather failed"):
             vlans_module.gather_vlans(failing)
 
-    assert "show vlan brief" in failing.fail_json.call_args.kwargs["msg"]
+    assert "show vlan" in failing.fail_json.call_args.kwargs["msg"]
     assert "connection lost" in failing.fail_json.call_args.kwargs["msg"]
+
+
+def test_xikeos_vlans_fails_explicitly_for_unsupported_mutating_edge_cases():
+    suspended = _fake_module({"config": [{"vlan_id": 100, "state": "suspend"}], "state": "merged"})
+    suspended.fail_json.side_effect = ExitJson
+    with patch.object(vlans_module, "AnsibleModule", return_value=suspended), pytest.raises(ExitJson):
+        vlans_module.main()
+
+    assert "suspend" in suspended.fail_json.call_args.kwargs["msg"]
+
+    default_delete = _fake_module({"config": [{"vlan_id": 1}], "state": "deleted"})
+    default_delete.fail_json.side_effect = ExitJson
+    with patch.object(vlans_module, "AnsibleModule", return_value=default_delete), pytest.raises(ExitJson):
+        vlans_module.main()
+
+    assert "VLAN 1" in default_delete.fail_json.call_args.kwargs["msg"]
+
+
+def test_static_routes_lifecycle_uses_network_apply_and_check_mode_computes_diff():
+    existing = [{"destination": "192.168.1.0", "mask": "255.255.255.0", "next_hop": "10.0.0.1", "distance": 1, "route_type": "ipv4"}]
+    desired = [{"destination": "192.168.2.0", "mask": "255.255.255.0", "next_hop": "10.0.0.1", "distance": 1, "route_type": "ipv4"}]
+
+    check_module = _fake_module({"config": desired, "state": "merged"}, check_mode=True)
+    with patch.object(static_routes_module, "AnsibleModule", return_value=check_module), patch.object(
+        static_routes_module, "StaticRoutesFacts"
+    ) as facts_mock, patch.object(static_routes_module, "load_config") as load_mock:
+        facts_mock.return_value.facts = {"static_routes": existing}
+        with pytest.raises(ExitJson):
+            static_routes_module.main()
+
+    assert check_module.exit_json.call_args.kwargs["changed"] is True
+    assert check_module.exit_json.call_args.kwargs["commands"] == ["ip route 192.168.2.0 255.255.255.0 10.0.0.1"]
+    load_mock.assert_not_called()
+
+    module = _fake_module({"config": desired, "state": "merged"})
+    with patch.object(static_routes_module, "AnsibleModule", return_value=module), patch.object(
+        static_routes_module, "StaticRoutesFacts"
+    ) as facts_mock, patch.object(static_routes_module, "load_config") as load_mock:
+        facts_mock.side_effect = [Mock(facts={"static_routes": existing}), Mock(facts={"static_routes": desired})]
+        with pytest.raises(ExitJson):
+            static_routes_module.main()
+
+    assert module.exit_json.call_args.kwargs["after"] == desired
+    load_mock.assert_called_once_with(module, ["ip route 192.168.2.0 255.255.255.0 10.0.0.1"])
+
+
+def test_static_routes_facts_failure_is_explicit():
+    module = _fake_module({"config": [], "state": "merged"})
+    module.fail_json.side_effect = ExitJson
+    with patch.object(static_routes_module, "AnsibleModule", return_value=module), patch.object(
+        static_routes_module, "StaticRoutesFacts", side_effect=Exception("route gather failed")
+    ), pytest.raises(ExitJson):
+        static_routes_module.main()
+
+    assert "route gather failed" in module.fail_json.call_args.kwargs["msg"]
+
+
+def test_acls_lifecycle_uses_network_apply_and_check_mode_computes_diff():
+    existing = [{"acl_id": 100, "acl_type": "standard", "rules": [{"action": "permit", "source": "10.0.0.0 0.255.255.255", "destination": "any"}]}]
+    desired = [{"acl_id": 100, "acl_type": "standard", "rules": [{"action": "deny", "source": "any", "destination": "any"}]}]
+
+    check_module = _fake_module({"config": desired, "state": "merged"}, check_mode=True)
+    with patch.object(acls_module, "AnsibleModule", return_value=check_module), patch.object(
+        acls_module, "AclsFacts"
+    ) as facts_mock, patch.object(acls_module, "load_config") as load_mock:
+        facts_mock.return_value.facts = {"acls": existing}
+        with pytest.raises(ExitJson):
+            acls_module.main()
+
+    assert check_module.exit_json.call_args.kwargs["changed"] is True
+    assert check_module.exit_json.call_args.kwargs["commands"] == ["access-list 100 deny any"]
+    load_mock.assert_not_called()
+
+    module = _fake_module({"config": desired, "state": "merged"})
+    with patch.object(acls_module, "AnsibleModule", return_value=module), patch.object(
+        acls_module, "AclsFacts"
+    ) as facts_mock, patch.object(acls_module, "load_config") as load_mock:
+        facts_mock.side_effect = [Mock(facts={"acls": existing}), Mock(facts={"acls": desired})]
+        with pytest.raises(ExitJson):
+            acls_module.main()
+
+    assert module.exit_json.call_args.kwargs["after"] == desired
+    load_mock.assert_called_once_with(module, ["access-list 100 deny any"])
+
+
+def test_acls_facts_failure_is_explicit():
+    module = _fake_module({"config": [], "state": "merged"})
+    module.fail_json.side_effect = ExitJson
+    with patch.object(acls_module, "AnsibleModule", return_value=module), patch.object(
+        acls_module, "AclsFacts", side_effect=Exception("ACL gather failed")
+    ), pytest.raises(ExitJson):
+        acls_module.main()
+
+    assert "ACL gather failed" in module.fail_json.call_args.kwargs["msg"]
+
+
+@pytest.mark.parametrize(
+    "module_under_test,facts_attr,facts_class,params,before,after,expected_commands",
+    [
+        (
+            interfaces_module,
+            "InterfacesFacts",
+            None,
+            {"config": [{"name": "ethernet 0/0/1", "description": "new", "enabled": True}], "state": "merged"},
+            {"ethernet 0/0/1": {"name": "ethernet 0/0/1", "description": "old", "enabled": True}},
+            {"ethernet 0/0/1": {"name": "ethernet 0/0/1", "description": "new", "enabled": True}},
+            ["interface ethernet 0/0/1", "description new"],
+        ),
+        (
+            l2_interfaces_module,
+            "L2InterfacesFacts",
+            None,
+            {"config": [{"name": "ethernet 0/0/1", "mode": "access", "access_vlan": 100}], "state": "merged"},
+            {"ethernet 0/0/1": {"mode": "access", "access_vlan": 10}},
+            {"ethernet 0/0/1": {"mode": "access", "access_vlan": 100}},
+            ["interface ethernet 0/0/1", "switchport pvid 100"],
+        ),
+        (
+            l3_interfaces_module,
+            "L3InterfacesFacts",
+            None,
+            {"config": [{"name": "vlan-interface 100", "ipv4": [{"address": "10.0.0.2", "subnet_mask": "255.255.255.0"}]}], "state": "merged"},
+            {"vlan-interface 100": {"ipv4": [{"address": "10.0.0.1", "subnet_mask": "255.255.255.0"}], "ipv6": []}},
+            {"vlan-interface 100": {"ipv4": [{"address": "10.0.0.2", "subnet_mask": "255.255.255.0"}], "ipv6": []}},
+            ["interface vlan-interface 100", "no ip address 10.0.0.1 255.255.255.0", "ip address 10.0.0.2 255.255.255.0"],
+        ),
+        (
+            lag_interfaces_module,
+            "LagInterfacesFacts",
+            None,
+            {"config": [{"name": "eth-trunk 1", "mode": "static", "members": ["0/0/1"]}], "state": "merged"},
+            {"eth-trunk 1": {"name": "eth-trunk 1", "mode": "static", "members": []}},
+            {"eth-trunk 1": {"name": "eth-trunk 1", "mode": "static", "members": ["0/0/1"]}},
+            ["interface eth-trunk 1", "link-aggregation members ethernet 0/0/1"],
+        ),
+    ],
+)
+def test_interface_family_lifecycle(module_under_test, facts_attr, facts_class, params, before, after, expected_commands):
+    facts_class = facts_class or getattr(module_under_test, facts_attr)
+
+    unchanged = _fake_module(params)
+    with patch.object(module_under_test, "AnsibleModule", return_value=unchanged), patch.object(
+        module_under_test, facts_attr
+    ) as facts_mock, patch.object(module_under_test, "load_config") as load_mock:
+        facts_mock.return_value.get_facts.return_value = after
+        with pytest.raises(ExitJson):
+            module_under_test.main()
+
+    assert unchanged.exit_json.call_args.kwargs["changed"] is False
+    assert unchanged.exit_json.call_args.kwargs["commands"] == []
+    load_mock.assert_not_called()
+
+    check_module = _fake_module(params, check_mode=True)
+    with patch.object(module_under_test, "AnsibleModule", return_value=check_module), patch.object(
+        module_under_test, facts_attr
+    ) as facts_mock, patch.object(module_under_test, "load_config") as load_mock:
+        facts_mock.return_value.get_facts.return_value = before
+        with pytest.raises(ExitJson):
+            module_under_test.main()
+
+    assert check_module.exit_json.call_args.kwargs["changed"] is True
+    assert check_module.exit_json.call_args.kwargs["commands"] == expected_commands
+    load_mock.assert_not_called()
+
+    changed = _fake_module(params)
+    with patch.object(module_under_test, "AnsibleModule", return_value=changed), patch.object(
+        module_under_test, facts_attr
+    ) as facts_mock, patch.object(module_under_test, "load_config") as load_mock:
+        facts_mock.return_value.get_facts.side_effect = [before, after]
+        with pytest.raises(ExitJson):
+            module_under_test.main()
+
+    assert changed.exit_json.call_args.kwargs["changed"] is True
+    assert changed.exit_json.call_args.kwargs["after"] == after
+    load_mock.assert_called_once_with(changed, expected_commands)
+
+    failing = _fake_module(params)
+    failing.fail_json.side_effect = ExitJson
+    with patch.object(module_under_test, "AnsibleModule", return_value=failing), patch.object(
+        module_under_test, facts_attr, side_effect=Exception("facts failed")
+    ), pytest.raises(ExitJson):
+        module_under_test.main()
+
+    assert "facts failed" in failing.fail_json.call_args.kwargs["msg"]
+
+
+@pytest.mark.parametrize(
+    "module_under_test,rendered_params,mutating_params",
+    [
+        (stp_module, {"config": {"stp_mode": "rstp"}, "state": "rendered"}, {"config": {"stp_mode": "rstp"}, "state": "merged"}),
+        (erps_module, {"instance_id": 1, "state": "rendered"}, {"instance_id": 1, "state": "present"}),
+        (eaps_module, {"domain_id": 1, "state": "rendered"}, {"domain_id": 1, "state": "present"}),
+        (qinq_module, {"config": {"mode": "customer"}, "state": "rendered"}, {"config": {"mode": "customer"}, "state": "merged"}),
+        (
+            mirror_module,
+            {"config": {"group_id": 1, "source_interfaces": [{"name": "cpu", "direction": "both"}]}, "state": "rendered"},
+            {"config": {"group_id": 1, "source_interfaces": [{"name": "cpu", "direction": "both"}]}, "state": "present"},
+        ),
+        (
+            port_isolate_module,
+            {"config": {"group_id": 1, "members": ["all"]}, "state": "rendered"},
+            {"config": {"group_id": 1, "members": ["all"]}, "state": "present"},
+        ),
+        (
+            flex_monitor_link_module,
+            {"config": {"flex_links": [{"group_id": 1, "master_port": {"type": "eth", "id": "0/0/1"}}]}, "state": "rendered"},
+            {"config": {"flex_links": [{"group_id": 1, "master_port": {"type": "eth", "id": "0/0/1"}}]}, "state": "merged"},
+        ),
+        (
+            ospfv2_module,
+            {"config": {"process_id": 1, "router_id": "1.1.1.1"}, "state": "rendered"},
+            {"config": {"process_id": 1, "router_id": "1.1.1.1"}, "state": "merged"},
+        ),
+    ],
+)
+def test_specialty_modules_are_rendered_only_or_fail_fast(module_under_test, rendered_params, mutating_params):
+    rendered = _fake_module(rendered_params)
+    with patch.object(module_under_test, "AnsibleModule", return_value=rendered):
+        with pytest.raises(ExitJson):
+            module_under_test.main()
+
+    assert rendered.exit_json.call_args.kwargs["changed"] is False
+    assert rendered.exit_json.call_args.kwargs["commands"]
+    assert rendered.exit_json.call_args.kwargs["rendered"] == rendered.exit_json.call_args.kwargs["commands"]
+
+    mutating = _fake_module(mutating_params)
+    mutating.fail_json.side_effect = ExitJson
+    with patch.object(module_under_test, "AnsibleModule", return_value=mutating):
+        with pytest.raises(ExitJson):
+            module_under_test.main()
+
+    assert "state=rendered only" in mutating.fail_json.call_args.kwargs["msg"]
+    mutating.exit_json.assert_not_called()
+
+
+def test_xikeos_vlans_action_injects_bundled_textfsm_template_before_delegating():
+    action = action_vlans_module.ActionModule.__new__(action_vlans_module.ActionModule)
+    action._task = Mock(args={"_textfsm_templates": {"existing.textfsm": "existing"}})
+
+    with patch.object(
+        action_vlans_module.ActionModule,
+        "_load_textfsm_template",
+        return_value="bundled-template",
+    ) as load_mock, patch.object(
+        action_vlans_module.NormalActionModule,
+        "run",
+        return_value={"ok": True},
+    ) as parent_run:
+        assert action.run(tmp="tmp", task_vars={"foo": "bar"}) == {"ok": True}
+
+    load_mock.assert_called_once_with(action_vlans_module.SHOW_VLAN_TEMPLATE)
+    assert action._task.args["_textfsm_templates"] == {
+        "existing.textfsm": "existing",
+        action_vlans_module.SHOW_VLAN_TEMPLATE: "bundled-template",
+    }
+    parent_run.assert_called_once_with(tmp="tmp", task_vars={"foo": "bar"})

@@ -100,6 +100,15 @@ commands:
 """
 
 from ansible.module_utils.basic import AnsibleModule
+from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config
+from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.lifecycle import run_resource_module_lifecycle
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from ansible.module_utils.basic import AnsibleModule as AnsibleModuleType
+
+LagInterfaceConfig = dict[str, Any]
+LagInterfaceState = dict[str, LagInterfaceConfig]
 
 try:
     from ansible_collections.xike.xikeos.plugins.module_utils.facts.lag_interfaces import (
@@ -110,13 +119,16 @@ except ImportError:
     HAS_FACTS = False
 
 
-def _extract_trunk_id(trunk_name):
+def _extract_trunk_id(trunk_name: str) -> str:
     """Extract numeric ID from trunk name like 'eth-trunk 1' -> 1."""
     parts = trunk_name.strip().split()
     return parts[-1] if parts else trunk_name
 
 
-def build_trunk_commands(config, existing_config):
+def build_trunk_commands(
+    config: LagInterfaceConfig,
+    existing_config: LagInterfaceState,
+) -> list[str]:
     """Build CLI commands for a single eth-trunk config entry.
 
     Args:
@@ -126,7 +138,7 @@ def build_trunk_commands(config, existing_config):
     Returns:
         list of CLI command strings (empty if no changes needed)
     """
-    commands = []
+    commands: list[str] = []
     trunk_name = config['name']
     trunk_id = _extract_trunk_id(trunk_name)
     existing = existing_config.get(trunk_name, {})
@@ -179,7 +191,47 @@ def build_trunk_commands(config, existing_config):
     return commands
 
 
-def main():
+def build_lifecycle_commands(
+    config_list: list[LagInterfaceConfig],
+    state: str,
+    existing_config: LagInterfaceState,
+) -> list[str]:
+    """Build commands for all requested LAG interface configs."""
+    commands: list[str] = []
+    for config in config_list:
+        commands.extend(build_trunk_commands(config, existing_config))
+    return commands
+
+
+def build_after_state(
+    before: LagInterfaceState,
+    desired: list[LagInterfaceConfig],
+    state: str,
+) -> LagInterfaceState:
+    """Build the expected normalized LAG interface state after lifecycle execution."""
+    after = dict(before)
+    if state == 'replaced':
+        after = {}
+    for config in desired:
+        current = dict(after.get(config['name'], {}))
+        current.update(config)
+        after[config['name']] = current
+    return after
+
+
+def gather_lag_interfaces(module: "AnsibleModuleType") -> LagInterfaceState:
+    """Gather LAG interface facts required for idempotent diffing."""
+    if not HAS_FACTS:
+        module.fail_json(msg='LAG interface facts support is required for diffing')
+        return {}
+    try:
+        return LagInterfacesFacts(module).get_facts()
+    except Exception as exc:
+        module.fail_json(msg='failed to gather LAG interface facts: {0}'.format(exc))
+        return {}
+
+
+def main() -> None:
     module = AnsibleModule(
         argument_spec=dict(
             config=dict(
@@ -208,41 +260,18 @@ def main():
     config_list = module.params.get('config', []) or []
     state = module.params.get('state', 'merged')
 
-    # Gather existing facts
-    if HAS_FACTS:
-        facts = LagInterfacesFacts(module)
-        existing_config = facts.get_facts()
-    else:
-        existing_config = {}
-
-    result = {
-        'changed': False,
-        'commands': [],
-        'before': existing_config,
-    }
-
-    all_commands = []
-
-    if state == 'merged':
-        for config in config_list:
-            commands = build_trunk_commands(config, existing_config)
-            all_commands.extend(commands)
-
-    elif state == 'replaced':
-        for config in config_list:
-            commands = build_trunk_commands(config, existing_config)
-            all_commands.extend(commands)
-
-    result['commands'] = all_commands
-
-    if module.check_mode:
-        module.exit_json(**result)
-
-    result['changed'] = bool(all_commands)
-    # Simulate after state (in real implementation, would re-run facts)
-    result['after'] = existing_config
-
-    module.exit_json(**result)
+    run_resource_module_lifecycle(
+        module=module,
+        config=config_list,
+        state=state,
+        gather=gather_lag_interfaces,
+        build_commands=build_lifecycle_commands,
+        build_after=build_after_state,
+        mutating_states=('merged', 'replaced'),
+        rendered_states=(),
+        apply_config=load_config,
+        gather_after_apply=True,
+    )
 
 
 if __name__ == '__main__':

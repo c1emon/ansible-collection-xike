@@ -56,7 +56,7 @@ The `xike.xikeos` Ansible Collection follows the standard Ansible network module
 │  │                    COMMAND_MAP (xikeos.py)                           │    │
 │  │                                                                      │    │
 │  │  show_version ──► show version                                       │    │
-│  │  show_vlan_brief ──► show vlan brief                                 │    │
+│  │  show_vlan ──► show vlan                                             │    │
 │  │  show_interface ──► show interface                                   │    │
 │  │  ...                                                                 │    │
 │  └──────────────────────────────┬──────────────────────────────────────┘    │
@@ -126,7 +126,24 @@ ansible_network_os: xike.xikeos.xikeos
 - **Transport**: `ansible.netcommon.network_cli` over SSH
 - **Terminal**: `plugins/terminal/xikeos.py` prompt, paging, privilege, and error handling
 - **Cliconf**: `plugins/cliconf/xikeos.py` operational command and configuration APIs
-- **References**: Netmiko Raisecom, TextFSM, Genie, and pyATS may inform parser and prompt work, but are not required runtime dependencies.
+- **References**: Netmiko Raisecom, Genie, and pyATS may inform parser and prompt work. TextFSM is a runtime dependency for complex table parsing.
+
+### Controller-Injected Parser Templates
+
+Modules that need bundled parser templates load those templates on the Ansible
+control node through their action plugins before module execution. For VLANs,
+`plugins/action/xikeos_vlans.py` reads
+`plugins/module_utils/facts/textfsm_templates/show_vlan.textfsm` and injects the
+template content into the module via the internal `_textfsm_templates` argument.
+That argument is intentionally omitted from public module documentation and
+examples.
+
+Parser helpers prefer injected template content, then local template files for
+direct development or unit-test use. If neither source is available, they raise
+an explicit missing-template error naming the template and expected path instead
+of silently falling back to duplicated built-in template strings. This keeps the
+file templates as the parser source of truth while avoiding reliance on
+non-Python template files being present in the AnsiballZ module payload.
 
 ## Resource Module Lifecycle
 
@@ -171,10 +188,10 @@ Each resource module follows a consistent lifecycle:
 ### Lifecycle Details
 
 #### 1. Gather Facts
-- Modules run "show" commands (e.g., `show vlan brief`, `show interface brief`)
+- Modules run "show" commands (e.g., `show vlan`, `show interface brief`)
 - Output is parsed using facts parsers in `plugins/module_utils/facts/`
 - Each parser extracts structured data from CLI output
-- Example: `facts/vlans.py` parses `show vlan brief` output
+- Example: `facts/vlans.py` parses `show vlan` output
 
 #### 2. Compute Diff
 - Compare desired configuration (from playbook) with existing configuration (from facts)
@@ -231,6 +248,8 @@ def parse_interface_brief(output):
 
 **Key patterns in facts parsers:**
 - Regex patterns to match CLI output format
+- TTP templates for key-value output, configuration blocks, and simple tables
+- TextFSM templates for complex tables with continuation rows, such as `show vlan`
 - Normalization of field values (e.g., `e0/0/1` → `ethernet 0/0/1`)
 - Handling of `-` or empty values as `None`
 - Conversion of abbreviations (e.g., `FD` → `full`, `ACC` → `access`)
@@ -273,7 +292,7 @@ The `COMMAND_MAP` in `plugins/module_utils/xikeos.py` provides a mapping between
 ```python
 COMMAND_MAP = {
     'show_version': 'show version',
-    'show_vlan_brief': 'show vlan brief',
+    'show_vlan': 'show vlan',
     'show_interface': 'show interface',
     'show_interface_brief': 'show interface brief',
     'show_ip_route': 'show ip route',

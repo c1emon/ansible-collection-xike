@@ -6,6 +6,8 @@
 from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
+from typing import Any, Mapping, Sequence
+
 DOCUMENTATION = """
 module: xikeos_erps
 short_description: Manage ERPS (G.8032) ring protection on Xike OS devices
@@ -70,7 +72,7 @@ options:
       - C(present) - Creates or updates the ERPS instance.
       - C(absent) - Removes the ERPS instance.
     type: str
-    choices: ['present', 'absent']
+    choices: ['present', 'absent', 'rendered']
     default: present
 author: Andy
 """
@@ -124,10 +126,11 @@ commands:
 """
 
 from ansible.module_utils.basic import AnsibleModule
+from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.lifecycle import exit_rendered_or_fail
 
 
-def vlan_id_to_ranges(vlan_ids):
-    """Convert a list of VLAN IDs to compact range strings."""
+def vlan_id_to_ranges(vlan_ids: Sequence[int]) -> str:
+    """Convert VLAN IDs into the compact ranges used in ERPS commands."""
     if not vlan_ids:
         return ""
     sorted_ids = sorted(set(vlan_ids))
@@ -154,8 +157,8 @@ def vlan_id_to_ranges(vlan_ids):
     return ",".join(ranges)
 
 
-def get_commands(config, state):
-    """Generate CLI commands from ERPS configuration."""
+def get_commands(config: Mapping[str, Any], state: str) -> list[str]:
+    """Render ERPS CLI commands for the requested configuration state."""
     commands = []
 
     instance_id = config.get("instance_id")
@@ -223,8 +226,8 @@ def get_commands(config, state):
     return commands
 
 
-def main():
-    """Main entry point for the module."""
+def main() -> None:
+    """Run the ERPS module entry point."""
     module_args = dict(
         instance_id=dict(
             type="int",
@@ -261,7 +264,7 @@ def main():
         ),
         state=dict(
             type="str",
-            choices=["present", "absent"],
+            choices=["present", "absent", "rendered"],
             default="present",
         ),
     )
@@ -281,22 +284,7 @@ def main():
         if val is not None:
             config[key] = val
 
-    result = {
-        "changed": False,
-        "commands": [],
-    }
-
-    # Generate commands
-    commands = get_commands(config, state)
-    result["commands"] = commands
-
-    if module.check_mode:
-        module.exit_json(**result)
-
-    if commands:
-        result["changed"] = True
-
-    module.exit_json(**result)
+    exit_rendered_or_fail(module, "xikeos_erps", config, state, get_commands, "present")
 
 
 if __name__ == "__main__":

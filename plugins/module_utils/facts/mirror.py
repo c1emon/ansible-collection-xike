@@ -3,10 +3,12 @@
 from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
+from typing import Any
+
 import re
 
 
-def parse_mirror_group(output):
+def parse_mirror_group(output: str | None) -> list[dict[str, Any]]:
     """
     Parse 'show mirror group' output and return mirror group facts.
 
@@ -110,7 +112,11 @@ def parse_mirror_group(output):
     return groups
 
 
-def get_facts(facts_module, connection, command="show mirror group all"):
+def get_facts(
+    facts_module: Any,
+    connection: Any,
+    command: str = "show mirror group all",
+) -> dict[str, list[dict[str, Any]]]:
     """
     Get mirror group facts from the device.
 

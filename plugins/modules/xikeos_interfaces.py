@@ -86,14 +86,24 @@ commands:
 """
 
 from ansible.module_utils.basic import AnsibleModule
+from ansible_collections.xike.xikeos.plugins.module_utils.facts.interfaces import InterfacesFacts
+from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config
+from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.lifecycle import run_resource_module_lifecycle
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from ansible.module_utils.basic import AnsibleModule as AnsibleModuleType
+
+InterfaceConfig = dict[str, Any]
+InterfaceState = dict[str, InterfaceConfig]
 
 # Reuse constants from module_utils
 SPEED_OPTIONS = ['10', '100', '1000', '10000', 'auto']
 DUPLEX_OPTIONS = ['auto', 'full', 'half']
 
 
-def build_interface_commands(cfg):
-    """Generate CLI commands for a single interface config entry."""
+def build_interface_commands(cfg: InterfaceConfig) -> list[str]:
+    """Generate CLI commands for a single base interface config entry."""
     name = cfg['name']
     commands = [
         'interface {name}'.format(name=name),
@@ -134,7 +144,60 @@ def build_interface_commands(cfg):
     return commands
 
 
-def main():
+def _normalize_interface_config(cfg: InterfaceConfig) -> InterfaceConfig:
+    """Normalize parser and module parameter names for interface comparison."""
+    normalized = dict(cfg)
+    if 'shutdown' in normalized and 'enabled' not in normalized:
+        normalized['enabled'] = not normalized.get('shutdown')
+    return normalized
+
+
+def build_commands(
+    config_list: list[InterfaceConfig],
+    state: str,
+    existing_config: InterfaceState,
+) -> list[str]:
+    """Build minimal commands for desired base interface configs."""
+    commands: list[str] = []
+    for cfg in config_list:
+        desired = _normalize_interface_config(cfg)
+        existing = _normalize_interface_config(existing_config.get(desired['name'], {}))
+        changed_cfg = {'name': desired['name']}
+        for field in ('description', 'speed', 'duplex', 'enabled', 'mtu'):
+            if field in desired and desired.get(field) != existing.get(field):
+                changed_cfg[field] = desired.get(field)
+        if len(changed_cfg) > 1:
+            commands.extend(build_interface_commands(changed_cfg))
+    return commands
+
+
+def build_after_state(
+    before: InterfaceState,
+    desired: list[InterfaceConfig],
+    state: str,
+) -> InterfaceState:
+    """Build the expected normalized interface state after lifecycle execution."""
+    after = {name: _normalize_interface_config(value) for name, value in before.items()}
+    if state == 'replaced':
+        after = {}
+    for cfg in desired:
+        normalized = _normalize_interface_config(cfg)
+        current = after.get(normalized['name'], {'name': normalized['name']})
+        current.update(normalized)
+        after[normalized['name']] = current
+    return after
+
+
+def gather_interfaces(module: "AnsibleModuleType") -> InterfaceState:
+    """Gather base interface facts required for idempotent diffing."""
+    try:
+        return InterfacesFacts(module).get_facts()
+    except Exception as exc:
+        module.fail_json(msg='failed to gather interface facts: {0}'.format(exc))
+        return {}
+
+
+def main() -> None:
     module = AnsibleModule(
         argument_spec=dict(
             config=dict(
@@ -159,27 +222,19 @@ def main():
     )
 
     config = module.params.get('config', []) or []
-
-    if not config:
-        module.exit_json(msg='No interface configuration provided', changed=False)
-
-    all_commands = []
-
-    for cfg in config:
-        cmds = build_interface_commands(cfg)
-        all_commands.extend(cmds)
-
-    result = {
-        'changed': False,
-        'commands': all_commands,
-    }
-
-    if module.check_mode:
-        module.exit_json(**result)
-
-    # Non-reference module: report planned commands; execution will be added in a follow-up refactor.
-    result['changed'] = True
-    module.exit_json(**result)
+    state = module.params.get('state', 'merged')
+    run_resource_module_lifecycle(
+        module=module,
+        config=config,
+        state=state,
+        gather=gather_interfaces,
+        build_commands=build_commands,
+        build_after=build_after_state,
+        mutating_states=('merged', 'replaced'),
+        rendered_states=(),
+        apply_config=load_config,
+        gather_after_apply=True,
+    )
 
 
 if __name__ == '__main__':

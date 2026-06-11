@@ -6,7 +6,7 @@ __metaclass__ = type
 # Command mappings:兮克命令 vs Cisco IOS 命令
 COMMAND_MAP = {
     'show_version': 'show version',
-    'show_vlan_brief': 'show vlan brief',
+    'show_vlan': 'show vlan',
     'show_interface': 'show interface',
     'show_interface_brief': 'show interface brief',
     'show_ip_route': 'show ip route',
@@ -51,6 +51,6 @@ SPEED_OPTIONS = ['10', '100', '1000', '10000', 'auto']
 DUPLEX_OPTIONS = ['auto', 'full', 'half']
 
 
-def map_command(key):
+def map_command(key: str) -> str:
     """Map a logical command key to Xike CLI command."""
     return COMMAND_MAP.get(key, key)

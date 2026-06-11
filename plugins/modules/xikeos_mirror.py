@@ -6,6 +6,8 @@
 from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
+from typing import Any, Mapping
+
 DOCUMENTATION = """
 module: xikeos_mirror
 short_description: Manage port mirroring on Xike OS switches
@@ -52,7 +54,7 @@ options:
       - C(present) - Creates or updates the mirror group.
       - C(absent) - Removes the mirror group or specified source interfaces.
     type: str
-    choices: ['present', 'absent']
+    choices: ['present', 'absent', 'rendered']
     default: present
 author: Andy
 """
@@ -106,10 +108,18 @@ commands:
 """
 
 from ansible.module_utils.basic import AnsibleModule
+from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.lifecycle import exit_rendered_or_fail
 
 
-def get_commands(config, state):
-    """Generate CLI commands from mirror configuration."""
+def _format_port(port_spec: Mapping[str, str] | None) -> str | None:
+    """Format a port spec into the CLI form used by mirror commands."""
+    if not port_spec:
+        return None
+    return "{0} {1}".format(port_spec["type"], port_spec["id"])
+
+
+def get_commands(config: Mapping[str, Any], state: str) -> list[str]:
+    """Render mirror-group CLI commands for the requested state."""
     commands = []
     group_id = config.get("group_id")
 
@@ -188,8 +198,8 @@ def get_commands(config, state):
     return commands
 
 
-def main():
-    """Main entry point for the module."""
+def main() -> None:
+    """Run the port mirroring module entry point."""
     module_args = dict(
         config=dict(
             type="dict",
@@ -221,7 +231,7 @@ def main():
         ),
         state=dict(
             type="str",
-            choices=["present", "absent"],
+            choices=["present", "absent", "rendered"],
             default="present",
         ),
     )
@@ -237,25 +247,7 @@ def main():
     config = module.params.get("config") or {}
     state = module.params.get("state", "present")
 
-    result = {
-        "changed": False,
-        "commands": [],
-    }
-
-    if not config:
-        module.exit_json(**result)
-
-    # Generate commands
-    commands = get_commands(config, state)
-    result["commands"] = commands
-
-    if module.check_mode:
-        module.exit_json(**result)
-
-    if commands:
-        result["changed"] = True
-
-    module.exit_json(**result)
+    exit_rendered_or_fail(module, "xikeos_mirror", config, state, get_commands, "present")
 
 
 if __name__ == "__main__":

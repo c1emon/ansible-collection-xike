@@ -3,6 +3,8 @@
 from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
+from typing import Any
+
 import re
 
 from ansible_collections.xike.xikeos.plugins.module_utils.xikeos import (
@@ -10,7 +12,7 @@ from ansible_collections.xike.xikeos.plugins.module_utils.xikeos import (
 )
 
 
-def _parse_port_spec(text):
+def _parse_port_spec(text: str | None) -> dict[str, str] | None:
     """Parse a port spec string like 'eth 0/0/1' or 'eth-trunk 1' into a dict."""
     if not text:
         return None
@@ -21,16 +23,16 @@ def _parse_port_spec(text):
     return None
 
 
-def parse_flex_link_output(output):
+def parse_flex_link_output(output: str | None) -> list[dict[str, Any]]:
     """
     Parse 'show flex-link group' output and return Flex-Link facts.
 
     Returns a list of Flex-Link group dicts.
     """
-    groups = []
-    current_group = None
+    groups: list[dict[str, Any]] = []
+    current_group: dict[str, Any] | None = None
 
-    if not output:
+    if output is None or output == "":
         return groups
 
     lines = output.strip().split("\n")
@@ -74,16 +76,16 @@ def parse_flex_link_output(output):
     return groups
 
 
-def parse_monitor_link_output(output):
+def parse_monitor_link_output(output: str | None) -> list[dict[str, Any]]:
     """
     Parse 'show monitor-link group' output and return Monitor-Link facts.
 
     Returns a list of Monitor-Link group dicts.
     """
-    groups = []
-    current_group = None
+    groups: list[dict[str, Any]] = []
+    current_group: dict[str, Any] | None = None
 
-    if not output:
+    if output is None or output == "":
         return groups
 
     lines = output.strip().split("\n")
@@ -129,7 +131,7 @@ def parse_monitor_link_output(output):
     return groups
 
 
-def get_facts(connection):
+def get_facts(connection: Any) -> dict[str, list[dict[str, Any]]]:
     """
     Get Flex-Link and Monitor-Link facts from the device.
 
@@ -139,7 +141,7 @@ def get_facts(connection):
     Returns:
         dict: Flex-Link and Monitor-Link facts
     """
-    facts = {
+    facts: dict[str, Any] = {
         "flex_links": [],
         "monitor_links": [],
     }

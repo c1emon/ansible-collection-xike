@@ -6,6 +6,8 @@
 from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
+from typing import Any, Mapping, Sequence
+
 DOCUMENTATION = """
 module: xikeos_stp
 short_description: Manage STP settings on Xike OS devices
@@ -95,7 +97,7 @@ options:
       - C(merged) - Creates or updates STP settings as specified.
       - C(replaced) - Replaces existing STP configuration with specified config.
     type: str
-    choices: ['merged', 'replaced']
+    choices: ['merged', 'replaced', 'rendered']
     default: merged
 author: Andy
 """
@@ -162,10 +164,11 @@ commands:
 """
 
 from ansible.module_utils.basic import AnsibleModule
+from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.lifecycle import exit_rendered_or_fail
 
 
-def vlan_id_to_ranges(vlan_ids):
-    """Convert a list of VLAN IDs to compact range strings."""
+def vlan_id_to_ranges(vlan_ids: Sequence[int]) -> str:
+    """Convert VLAN IDs into the compact range strings used by STP."""
     if not vlan_ids:
         return ""
     sorted_ids = sorted(set(vlan_ids))
@@ -192,8 +195,8 @@ def vlan_id_to_ranges(vlan_ids):
     return ",".join(ranges)
 
 
-def get_commands(config, state):
-    """Generate CLI commands from STP configuration."""
+def get_commands(config: Mapping[str, Any], state: str) -> list[str]:
+    """Render STP CLI commands for the requested configuration state."""
     commands = []
 
     if not config:
@@ -275,8 +278,8 @@ def get_commands(config, state):
     return commands
 
 
-def main():
-    """Main entry point for the module."""
+def main() -> None:
+    """Run the STP module entry point."""
     module_args = dict(
         config=dict(
             type="dict",
@@ -343,7 +346,7 @@ def main():
         ),
         state=dict(
             type="str",
-            choices=["merged", "replaced"],
+            choices=["merged", "replaced", "rendered"],
             default="merged",
         ),
     )
@@ -356,25 +359,7 @@ def main():
     config = module.params.get("config", {})
     state = module.params.get("state", "merged")
 
-    result = {
-        "changed": False,
-        "commands": [],
-    }
-
-    if not config:
-        module.exit_json(**result)
-
-    # Generate commands
-    commands = get_commands(config, state)
-    result["commands"] = commands
-
-    if module.check_mode:
-        module.exit_json(**result)
-
-    if commands:
-        result["changed"] = True
-
-    module.exit_json(**result)
+    exit_rendered_or_fail(module, "xikeos_stp", config, state, get_commands, "merged")
 
 
 if __name__ == "__main__":

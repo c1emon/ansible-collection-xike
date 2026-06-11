@@ -3,12 +3,22 @@
 from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
+import sys
+import types
+
 import pytest
 
 # Import parsers directly (no device connection needed)
 from ansible_collections.xike.xikeos.plugins.module_utils.facts.vlans import (
-    parse_vlan_brief,
-    parse_vlan_line,
+    SHOW_VLAN_TEMPLATE,
+    parse_vlan,
+)
+from ansible_collections.xike.xikeos.plugins.module_utils.facts.textfsm_parser import (
+    parse_textfsm_template,
+)
+from ansible_collections.xike.xikeos.plugins.module_utils.facts.ttp_parser import (
+    _load_ttp_template,
+    parse_ttp_template,
 )
 from ansible_collections.xike.xikeos.plugins.module_utils.facts.interfaces import (
     parse_interface_brief,
@@ -25,73 +35,307 @@ from ansible_collections.xike.xikeos.plugins.module_utils.facts.stp import (
 
 
 # ---------------------------------------------------------------------------
-# VLAN brief parser tests
+# VLAN parser tests
 # ---------------------------------------------------------------------------
 
-class TestVlanBriefParser:
-    """Tests for parse_vlan_brief."""
+class TestVlanParser:
+    """Tests for parse_vlan."""
 
     SAMPLE_OUTPUT = """\
-VLAN Name                             Status    Ports
----- -------------------------------- --------- -------------------------------
-1    default                          active    e0/0/1, e0/0/2, e0/0/3
-100  DATA                             active    e0/0/10
-200  VOICE                            active    e0/0/20
+VLAN Name         Type       Media     Ports
+---- ------------ ---------- --------- ----------------------------------------
+1    default      Static     ENET      Ethernet1/0/1       Ethernet1/0/2(T)
+                                       Ethernet1/0/3(T)    Ethernet1/0/4(T)
+10   dev          Static     ENET      Ethernet1/0/3(T)    Ethernet1/0/4(T)
+                                       Ethernet1/0/5(T)
+21   isp          Static     ENET      Ethernet1/0/2(T)    Ethernet1/0/3(T)
 """
 
-    def test_parse_vlan_brief_returns_list(self):
-        result = parse_vlan_brief(self.SAMPLE_OUTPUT)
+    def test_parse_vlan_returns_list(self):
+        result = parse_vlan(self.SAMPLE_OUTPUT)
         assert isinstance(result, list)
 
-    def test_vlan_brief_parser_count(self):
-        result = parse_vlan_brief(self.SAMPLE_OUTPUT)
+    def test_vlan_parser_count(self):
+        result = parse_vlan(self.SAMPLE_OUTPUT)
         assert len(result) == 3
 
-    def test_vlan_brief_parser_first_vlan(self):
-        result = parse_vlan_brief(self.SAMPLE_OUTPUT)
+    def test_vlan_parser_first_vlan(self):
+        result = parse_vlan(self.SAMPLE_OUTPUT)
         vlan = result[0]
         assert vlan["vlan_id"] == 1
         assert vlan["name"] == "default"
+        assert vlan["type"] == "Static"
+        assert vlan["media"] == "ENET"
+        assert vlan["state"] == "active"
         assert vlan["status"] == "active"
-        assert vlan["ports"] == ["e0/0/1", "e0/0/2", "e0/0/3"]
+        assert vlan["ports"] == [
+            {"name": "Ethernet1/0/1", "tagged": False},
+            {"name": "Ethernet1/0/2", "tagged": True},
+            {"name": "Ethernet1/0/3", "tagged": True},
+            {"name": "Ethernet1/0/4", "tagged": True},
+        ]
 
-    def test_vlan_brief_parser_second_vlan(self):
-        result = parse_vlan_brief(self.SAMPLE_OUTPUT)
+    def test_vlan_parser_second_vlan(self):
+        result = parse_vlan(self.SAMPLE_OUTPUT)
         vlan = result[1]
-        assert vlan["vlan_id"] == 100
-        assert vlan["name"] == "DATA"
+        assert vlan["vlan_id"] == 10
+        assert vlan["name"] == "dev"
         assert vlan["status"] == "active"
-        assert vlan["ports"] == ["e0/0/10"]
+        assert vlan["ports"] == [
+            {"name": "Ethernet1/0/3", "tagged": True},
+            {"name": "Ethernet1/0/4", "tagged": True},
+            {"name": "Ethernet1/0/5", "tagged": True},
+        ]
 
-    def test_vlan_brief_parser_third_vlan(self):
-        result = parse_vlan_brief(self.SAMPLE_OUTPUT)
+    def test_vlan_parser_third_vlan(self):
+        result = parse_vlan(self.SAMPLE_OUTPUT)
         vlan = result[2]
-        assert vlan["vlan_id"] == 200
-        assert vlan["name"] == "VOICE"
-        assert vlan["ports"] == ["e0/0/20"]
+        assert vlan["vlan_id"] == 21
+        assert vlan["name"] == "isp"
+        assert vlan["ports"] == [
+            {"name": "Ethernet1/0/2", "tagged": True},
+            {"name": "Ethernet1/0/3", "tagged": True},
+        ]
 
-    def test_vlan_brief_parser_empty_output(self):
-        result = parse_vlan_brief("")
+    def test_vlan_parser_empty_output(self):
+        result = parse_vlan("")
         assert result == []
 
-    def test_vlan_brief_parser_no_ports(self):
+    def test_vlan_parser_no_ports(self):
         output = """\
-VLAN Name                             Status    Ports
----- -------------------------------- --------- -------------------------------
-500  EMPTY                            active
+VLAN Name         Type       Media     Ports
+---- ------------ ---------- --------- ----------------------------------------
+500  EMPTY        Static     ENET
 """
-        result = parse_vlan_brief(output)
+        result = parse_vlan(output)
         assert len(result) == 1
         assert result[0]["vlan_id"] == 500
         assert result[0]["name"] == "EMPTY"
+        assert result[0]["state"] == "active"
+        assert result[0]["status"] == "active"
+        assert result[0]["type"] == "Static"
+        assert result[0]["media"] == "ENET"
         assert result[0]["ports"] == []
 
-    def test_parse_vlan_line_single(self):
-        line = "100  DATA   active   e0/0/10"
-        result = parse_vlan_line(line)
-        assert result is not None
-        assert result["vlan_id"] == 100
-        assert result["name"] == "DATA"
+    def test_vlan_parser_uses_bundled_textfsm_template(self):
+        rows = parse_textfsm_template(self.SAMPLE_OUTPUT, SHOW_VLAN_TEMPLATE)
+        assert rows == [
+            {
+                "vlan_id": "1",
+                "name": "default",
+                "type": "Static",
+                "media": "ENET",
+                "ports": ["Ethernet1/0/1", "Ethernet1/0/2(T)", "Ethernet1/0/3(T)", "Ethernet1/0/4(T)"],
+            },
+            {
+                "vlan_id": "10",
+                "name": "dev",
+                "type": "Static",
+                "media": "ENET",
+                "ports": ["Ethernet1/0/3(T)", "Ethernet1/0/4(T)", "Ethernet1/0/5(T)"],
+            },
+            {
+                "vlan_id": "21",
+                "name": "isp",
+                "type": "Static",
+                "media": "ENET",
+                "ports": ["Ethernet1/0/2(T)", "Ethernet1/0/3(T)"],
+            },
+        ]
+
+    def test_vlan_parser_supports_multiple_continuation_lines(self):
+        output = """\
+VLAN Name         Type       Media     Ports
+---- ------------ ---------- --------- ----------------------------------------
+600  guest        Static     ENET      Ethernet1/0/1
+                                       Ethernet1/0/2(T)
+                                       Ethernet1/0/3(T)
+"""
+        result = parse_vlan(output)
+        assert result == [
+            {
+                "vlan_id": 600,
+                "name": "guest",
+                "type": "Static",
+                "media": "ENET",
+                "state": "active",
+                "status": "active",
+                "ports": [
+                    {"name": "Ethernet1/0/1", "tagged": False},
+                    {"name": "Ethernet1/0/2", "tagged": True},
+                    {"name": "Ethernet1/0/3", "tagged": True},
+                ],
+            }
+        ]
+
+    def test_parse_show_vlan_real_switch_output(self):
+        output = """\
+Switch#show vlan
+VLAN Name         Type       Media     Ports
+---- ------------ ---------- --------- ----------------------------------------
+1    default      Static     ENET      Ethernet1/0/1       Ethernet1/0/2(T)
+                                       Ethernet1/0/3(T)    Ethernet1/0/4(T)
+                                       Ethernet1/0/5       Ethernet1/0/6
+                                       Ethernet1/0/7
+10   dev          Static     ENET      Ethernet1/0/3(T)    Ethernet1/0/4(T)
+                                       Ethernet1/0/5(T)    Ethernet1/0/6(T)
+                                       Ethernet1/0/7(T)
+21   isp          Static     ENET      Ethernet1/0/2(T)    Ethernet1/0/3(T)
+                                       Ethernet1/0/4(T)
+33   storage      Static     ENET      Ethernet1/0/3(T)    Ethernet1/0/9
+                                       Ethernet1/0/10      Ethernet1/0/11
+                                       Ethernet1/0/12
+40   hole         Static     ENET      Ethernet1/0/3(T)    Ethernet1/0/4(T)
+50   prod         Static     ENET      Ethernet1/0/3(T)    Ethernet1/0/4(T)
+                                       Ethernet1/0/5(T)    Ethernet1/0/6(T)
+                                       Ethernet1/0/7(T)    Ethernet1/0/8
+99   lan          Static     ENET      Ethernet1/0/2(T)    Ethernet1/0/3(T)
+                                       Ethernet1/0/4(T)
+"""
+        result = parse_vlan(output)
+
+        assert [vlan["vlan_id"] for vlan in result] == [1, 10, 21, 33, 40, 50, 99]
+        assert [len(vlan["ports"]) for vlan in result] == [7, 5, 3, 5, 2, 6, 3]
+        assert result[0]["ports"] == [
+            {"name": "Ethernet1/0/1", "tagged": False},
+            {"name": "Ethernet1/0/2", "tagged": True},
+            {"name": "Ethernet1/0/3", "tagged": True},
+            {"name": "Ethernet1/0/4", "tagged": True},
+            {"name": "Ethernet1/0/5", "tagged": False},
+            {"name": "Ethernet1/0/6", "tagged": False},
+            {"name": "Ethernet1/0/7", "tagged": False},
+        ]
+        assert result[3]["name"] == "storage"
+        assert result[3]["ports"] == [
+            {"name": "Ethernet1/0/3", "tagged": True},
+            {"name": "Ethernet1/0/9", "tagged": False},
+            {"name": "Ethernet1/0/10", "tagged": False},
+            {"name": "Ethernet1/0/11", "tagged": False},
+            {"name": "Ethernet1/0/12", "tagged": False},
+        ]
+        assert result[5]["ports"][-1] == {"name": "Ethernet1/0/8", "tagged": False}
+
+    def test_textfsm_helper_missing_template_error_is_actionable(self):
+        with pytest.raises(FileNotFoundError, match="Bundled TextFSM template 'missing.textfsm' was not injected and was not found"):
+            parse_textfsm_template(self.SAMPLE_OUTPUT, "missing.textfsm")
+
+    def test_textfsm_helper_uses_injected_template_when_local_file_is_unavailable(self):
+        expected_template = "value VLAN_ID (\\d+)\nvalue NAME (\\S+)\n\nstart\n  ^${VLAN_ID} ${NAME} -> Record"
+        expected_output = self.SAMPLE_OUTPUT
+
+        class FakeTextFSM:
+            def __init__(self, template_file):
+                self.template = template_file.read()
+                self.header = ["VLAN_ID", "NAME"]
+
+            def ParseText(self, output):
+                assert output == expected_output
+                assert self.template == expected_template
+                return [["10", "dev"]]
+
+        fake_textfsm = types.SimpleNamespace(TextFSM=FakeTextFSM)
+
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setitem(sys.modules, "textfsm", fake_textfsm)
+            mp.setattr("ansible_collections.xike.xikeos.plugins.module_utils.facts.textfsm_parser.os.path.isfile", lambda *_: False)
+            result = parse_textfsm_template(
+                self.SAMPLE_OUTPUT,
+                "show_vlan.textfsm",
+                templates={
+                    "show_vlan.textfsm": expected_template,
+                },
+            )
+
+        assert result == [{"vlan_id": "10", "name": "dev"}]
+
+    def test_ttp_helper_uses_injected_template_and_missing_template_is_actionable(self):
+        assert _load_ttp_template("show_vlan.ttp", templates={"show_vlan.ttp": "template contents"}) == "template contents"
+
+        with pytest.raises(FileNotFoundError, match="Bundled TTP template 'missing.ttp' was not injected and was not found"):
+            with pytest.MonkeyPatch.context() as mp:
+                mp.setattr("ansible_collections.xike.xikeos.plugins.module_utils.facts.ttp_parser.os.path.isfile", lambda *_: False)
+                _load_ttp_template("missing.ttp")
+
+    def test_ttp_parser_accepts_injected_template_without_local_file(self):
+        class FakeTTP:
+            def __init__(self, data, template):
+                self.data = data
+                self.template = template
+                self._result = [[{"vlans": [{"vlan_id": 10, "name": "dev"}]}]]
+
+            def parse(self, one=True):
+                assert one is True
+                assert self.template == "template contents"
+
+            def result(self):
+                return self._result
+
+        fake_ttp_module = types.SimpleNamespace(ttp=FakeTTP)
+
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setitem(sys.modules, "ttp", fake_ttp_module)
+            result = parse_ttp_template(
+                "show vlan output",
+                "show_vlan.ttp",
+                result_key="vlans",
+                templates={"show_vlan.ttp": "template contents"},
+            )
+
+        assert result == [{"vlan_id": 10, "name": "dev"}]
+
+    def test_parse_show_vlan_multiline_real_output(self):
+        output = """\
+VLAN Name         Type       Media     Ports
+---- ------------ ---------- --------- ----------------------------------------
+1    default      Static     ENET      Ethernet1/0/1       Ethernet1/0/2(T)
+                                       Ethernet1/0/3(T)    Ethernet1/0/4(T)
+10   dev          Static     ENET      Ethernet1/0/3(T)    Ethernet1/0/4(T)
+                                       Ethernet1/0/5(T)
+21   isp          Static     ENET      Ethernet1/0/2(T)    Ethernet1/0/3(T)
+"""
+        result = parse_vlan(output)
+
+        assert result == [
+            {
+                "vlan_id": 1,
+                "name": "default",
+                "type": "Static",
+                "media": "ENET",
+                "state": "active",
+                "status": "active",
+                "ports": [
+                    {"name": "Ethernet1/0/1", "tagged": False},
+                    {"name": "Ethernet1/0/2", "tagged": True},
+                    {"name": "Ethernet1/0/3", "tagged": True},
+                    {"name": "Ethernet1/0/4", "tagged": True},
+                ],
+            },
+            {
+                "vlan_id": 10,
+                "name": "dev",
+                "type": "Static",
+                "media": "ENET",
+                "state": "active",
+                "status": "active",
+                "ports": [
+                    {"name": "Ethernet1/0/3", "tagged": True},
+                    {"name": "Ethernet1/0/4", "tagged": True},
+                    {"name": "Ethernet1/0/5", "tagged": True},
+                ],
+            },
+            {
+                "vlan_id": 21,
+                "name": "isp",
+                "type": "Static",
+                "media": "ENET",
+                "state": "active",
+                "status": "active",
+                "ports": [
+                    {"name": "Ethernet1/0/2", "tagged": True},
+                    {"name": "Ethernet1/0/3", "tagged": True},
+                ],
+            },
+        ]
 
 
 # ---------------------------------------------------------------------------

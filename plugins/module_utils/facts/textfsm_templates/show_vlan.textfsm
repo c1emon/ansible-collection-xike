@@ -1,0 +1,27 @@
+Value Required VLAN_ID (\d+)
+Value NAME (\S+)
+Value TYPE (\S+)
+Value MEDIA (\S+)
+Value List PORTS (\S+)
+
+Start
+  ^VLAN\s+Name\s+Type\s+Media\s+Ports -> Vlans
+  ^\S+#show\s+vlan
+  ^\s*$$
+
+Vlans
+  ^\d+ -> Continue.Record
+  ^${VLAN_ID}\s+${NAME}\s+${TYPE}\s+${MEDIA}\s*$$
+  ^${VLAN_ID}\s+${NAME}\s+${TYPE}\s+${MEDIA}\s+${PORTS} -> Continue
+  ^\d+\s+(?:\S+\s+){4}${PORTS} -> Continue
+  ^\d+\s+(?:\S+\s+){5}${PORTS} -> Continue
+  ^\d+\s+(?:\S+\s+){6}${PORTS} -> Continue
+  ^\d+\s+(?:\S+\s+){7}${PORTS} -> Continue
+  ^\s+${PORTS} -> Continue
+  ^\s+\S+\s+${PORTS} -> Continue
+  ^\s+(?:\S+\s+){2}${PORTS} -> Continue
+  ^\s+(?:\S+\s+){3}${PORTS} -> Continue
+  ^\s+(?:\S+\s+){4}${PORTS} -> Continue
+  ^\s+(?:\S+\s+){5}${PORTS} -> Continue
+  ^\s*-+$$
+  ^\s*$$

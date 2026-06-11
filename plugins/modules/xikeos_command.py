@@ -6,6 +6,8 @@
 from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
+from typing import Any
+
 DOCUMENTATION = """
 module: xikeos_command
 short_description: Run commands on Xike switches
@@ -27,7 +29,7 @@ EXAMPLES = """
   xike.xikeos.xikeos_command:
     commands:
       - show version
-      - show vlan brief
+      - show vlan
   register: result
 
 - debug:
@@ -39,7 +41,8 @@ from ansible.module_utils.common.text.converters import to_text
 from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.xikeos import run_commands
 
 
-def _split_lines(output) -> list[str]:
+def _split_lines(output: Any) -> list[str]:
+    """Split any command output into normalized text lines."""
     return to_text(output, errors='surrogate_or_strict').splitlines()
 
 

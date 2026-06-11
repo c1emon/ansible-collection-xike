@@ -210,6 +210,12 @@ commands:
 """
 
 from ansible.module_utils.basic import AnsibleModule
+from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config
+from typing import Any
+
+AclRule = dict[str, Any]
+AclConfig = dict[str, Any]
+RuleKey = tuple[Any, Any, Any, Any]
 
 try:
     from ansible_collections.xike.xikeos.plugins.module_utils.facts.acls import (
@@ -226,7 +232,7 @@ MAC_ACL_RANGE = (1000, 1999)
 MIXED_ACL_RANGE = (2000, 2999)
 
 
-def validate_acl_id(acl_id, acl_type):
+def validate_acl_id(acl_id: int, acl_type: str) -> tuple[bool, str]:
     """Validate ACL ID is within the correct range for the given type.
 
     Args:
@@ -263,7 +269,7 @@ def validate_acl_id(acl_id, acl_type):
     return True, ''
 
 
-def rule_key(rule):
+def rule_key(rule: AclRule) -> RuleKey:
     """Generate a unique key for a rule entry for comparison."""
     return (
         rule.get('action', ''),
@@ -273,7 +279,7 @@ def rule_key(rule):
     )
 
 
-def build_acl_commands(config, existing_acls):
+def build_acl_commands(config: list[AclConfig], existing_acls: list[AclConfig]) -> list[str]:
     """Build CLI commands for ACL configuration.
 
     Args:
@@ -283,10 +289,10 @@ def build_acl_commands(config, existing_acls):
     Returns:
         list: CLI commands to apply
     """
-    commands = []
+    commands: list[str] = []
 
     # Build existing ACL map
-    existing_by_id = {}
+    existing_by_id: dict[int, AclConfig] = {}
     for acl in existing_acls:
         existing_by_id[acl['acl_id']] = acl
 
@@ -306,12 +312,17 @@ def build_acl_commands(config, existing_acls):
     return commands
 
 
-def _build_rule_commands(acl_id, acl_type, desired_rules, existing_rules):
+def _build_rule_commands(
+    acl_id: int,
+    acl_type: str,
+    desired_rules: list[AclRule],
+    existing_rules: list[AclRule],
+) -> list[str]:
     """Build commands to configure rules for an ACL."""
-    commands = []
+    commands: list[str] = []
 
     # Create set of existing rule keys
-    existing_rule_keys = set()
+    existing_rule_keys: set[RuleKey] = set()
     for rule in existing_rules:
         existing_rule_keys.add(rule_key(rule))
 
@@ -326,7 +337,7 @@ def _build_rule_commands(acl_id, acl_type, desired_rules, existing_rules):
     return commands
 
 
-def _build_access_list_cmd(acl_id, acl_type, rule):
+def _build_access_list_cmd(acl_id: int, acl_type: str, rule: AclRule) -> str | None:
     """Build a single 'access-list' command.
 
     Format: access-list <id> <permit|deny> [<protocol>] <src> [<dst>]
@@ -356,7 +367,7 @@ def _build_access_list_cmd(acl_id, acl_type, rule):
     return None
 
 
-def build_delete_commands(config, existing_acls):
+def build_delete_commands(config: list[AclConfig], existing_acls: list[AclConfig]) -> list[str]:
     """Build CLI commands to delete ACLs.
 
     Args:
@@ -366,7 +377,7 @@ def build_delete_commands(config, existing_acls):
     Returns:
         list: CLI commands to apply
     """
-    commands = []
+    commands: list[str] = []
 
     # If config is empty, delete all ACLs
     if not config:
@@ -376,7 +387,7 @@ def build_delete_commands(config, existing_acls):
         return commands
 
     # Delete specific ACLs
-    delete_ids = set()
+    delete_ids: set[int] = set()
     for acl_config in config:
         delete_ids.add(acl_config['acl_id'])
 
@@ -388,15 +399,15 @@ def build_delete_commands(config, existing_acls):
     return commands
 
 
-def build_replaced_commands(config, existing_acls):
+def build_replaced_commands(config: list[AclConfig], existing_acls: list[AclConfig]) -> list[str]:
     """Build CLI commands for 'replaced' state.
 
     Removes existing ACLs in the config range and adds desired ones.
     """
-    commands = []
+    commands: list[str] = []
 
     # Build existing ACL map
-    existing_by_id = {}
+    existing_by_id: dict[int, AclConfig] = {}
     for acl in existing_acls:
         existing_by_id[acl['acl_id']] = acl
 
@@ -418,7 +429,39 @@ def build_replaced_commands(config, existing_acls):
     return commands
 
 
-def main():
+def build_after_state(
+    before: list[AclConfig],
+    desired: list[AclConfig],
+    state: str,
+) -> list[AclConfig]:
+    """Build a normalized simulated after-state for ACL lifecycle results."""
+    after_by_id = {acl['acl_id']: dict(acl) for acl in before}
+
+    if state in ('merged', 'replaced'):
+        for acl in desired:
+            acl_id = acl['acl_id']
+            if state == 'replaced' or acl_id not in after_by_id:
+                after_by_id[acl_id] = dict(acl)
+                after_by_id[acl_id]['rules'] = list(acl.get('rules', []))
+                continue
+            existing = after_by_id[acl_id]
+            existing_rules = list(existing.get('rules', []))
+            existing_keys = {rule_key(rule) for rule in existing_rules}
+            for rule in acl.get('rules', []):
+                if rule_key(rule) not in existing_keys:
+                    existing_rules.append(rule)
+            existing['rules'] = existing_rules
+    elif state == 'deleted':
+        if desired:
+            for acl in desired:
+                after_by_id.pop(acl['acl_id'], None)
+        else:
+            after_by_id = {}
+
+    return [after_by_id[acl_id] for acl_id in sorted(after_by_id)]
+
+
+def main() -> None:
     """Main entry point for the module."""
     module_args = dict(
         config=dict(
@@ -500,20 +543,18 @@ def main():
         if not is_valid:
             module.fail_json(msg=error_msg)
 
-    # Gather existing facts
-    if HAS_FACTS:
-        try:
-            facts = AclsFacts(module)
-            existing_acls = facts.facts.get('acls', [])
-        except Exception:
-            existing_acls = []
-    else:
-        existing_acls = []
+    if not HAS_FACTS:
+        module.fail_json(msg='ACL facts support is required for diffing')
+        return
+
+    try:
+        facts = AclsFacts(module)
+        existing_acls = facts.facts.get('acls', [])
+    except Exception as exc:
+        module.fail_json(msg='failed to gather ACL facts: {0}'.format(exc))
+        return
 
     result['before'] = existing_acls
-
-    if module.check_mode:
-        module.exit_json(**result)
 
     # Generate commands based on state
     if state == 'merged':
@@ -527,18 +568,19 @@ def main():
 
     result['commands'] = commands
     result['changed'] = bool(commands)
+    result['after'] = build_after_state(existing_acls, config, state) if commands else existing_acls
 
-    # Re-gather facts for 'after' state (only when not in check mode)
-    if HAS_FACTS and commands:
+    if module.check_mode:
+        module.exit_json(**result)
+
+    if commands:
+        load_config(module, commands)
         try:
-            # Execute commands first
-            for cmd in commands:
-                module.run_command(cmd)
-            # Then re-gather facts
             facts_after = AclsFacts(module)
             result['after'] = facts_after.facts.get('acls', [])
-        except Exception:
-            pass
+        except Exception as exc:
+            module.fail_json(msg='failed to gather ACL facts after apply: {0}'.format(exc))
+            return
 
     module.exit_json(**result)
 

@@ -23,9 +23,9 @@ The `xike.xikeos` collection provides Ansible modules for automating **Xike (兮
 - **Hybrid port mode** — a Xike-specific feature for flexible VLAN tagging
 - **ERPS/EAPS** ring protection for carrier-grade Ethernet
 - **QinQ tunneling** for service provider deployments
-- **Reference execution path** for `xikeos_command`, `xikeos_config`, and `xikeos_vlans` through `network_cli`/cliconf
-- **Reference idempotent VLAN module** with current-state gathering, check mode, and `before`/`after` results
-- Other resource modules currently provide command-generation/planned-command behavior and are candidates for follow-up execution-path refactors.
+- **Network execution path** for operational commands and configuration through `network_cli`/cliconf helpers
+- **Lifecycle-complete resource modules** for VLANs, static routes, ACLs, and interface families with current-state gathering, check mode, `load_config()` apply, and `before`/`after` results
+- **Explicit non-mutating `rendered` state** for specialty modules that are not yet lifecycle-complete, with mutating states failing fast instead of reporting unapplied changes
 
 ## Architecture
 
@@ -76,6 +76,8 @@ The `xike.xikeos` collection provides Ansible modules for automating **Xike (兮
 |-----------|-------------|-------|
 | **Ansible** | >= 2.15 | Core automation engine |
 | **ansible.netcommon** | >= 5.0 | Standard `network_cli`, terminal, and cliconf plugins |
+| **ttp** | >= 0.9.5 | Runtime parser for bundled facts templates |
+| **TextFSM** | >= 1.1.3 | Runtime parser for complex table facts templates |
 | **Netmiko** | optional | Reference only for Raisecom-like CLI behavior |
 | **Python** | >= 3.10 | Runtime dependency |
 
@@ -84,7 +86,21 @@ The `xike.xikeos` collection provides Ansible modules for automating **Xike (兮
 ```bash
 # Install Python dependencies
 ansible-galaxy collection install ansible.netcommon
+pip install "ttp>=0.9.5" "textfsm>=1.1.3"
 ```
+
+Ansible collection installation does not automatically install Python package
+dependencies. Install `ttp` and `textfsm` in the Python environment used by the
+Ansible control node before gathering VLAN facts or using `xikeos_vlans`
+current-state diffing.
+
+VLAN gathering loads the bundled `show_vlan.textfsm` template on the control
+node through the `xikeos_vlans` action plugin and passes the template to the
+module as an internal argument. The module can still use local template files
+for direct development tests, but live AnsiballZ execution does not require
+template data files inside the module payload. If a required parser template is
+neither injected nor available locally, the parser fails explicitly with the
+missing template name and expected path.
 
 ## Installation
 
@@ -217,7 +233,7 @@ all:
 
 ### ✅ 模块覆盖（19 章）
 
-> 状态说明：`xikeos_command`、`xikeos_config`、`xikeos_vlans` 已接入 `network_cli`/cliconf 执行路径；其余资源模块目前主要生成/报告计划命令，尚未全部完成真机执行路径重构。
+> 状态说明：`xikeos_vlans`、`xikeos_static_routes`、`xikeos_acls`、`xikeos_interfaces`、`xikeos_l2_interfaces`、`xikeos_l3_interfaces`、`xikeos_lag_interfaces` 已按资源模块生命周期接入 facts/diff/check-mode/`load_config()` 执行路径。STP、ERPS、EAPS、QinQ、mirror、port isolation、flex/monitor link、OSPFv2 当前为显式非变更 `rendered` 行为；未完成生命周期前，变更型状态会 fail fast，避免报告未实际应用的 `changed: true`。
 
 | 手册章节 | 功能 | 对应模块 | 备注 |
 |---------|------|---------|------|
@@ -730,7 +746,7 @@ all:
 
 ### Partial Deployment
 
-> Only `xikeos_vlans` and `xikeos_config` in this example execute through the current reference path. L2/L3 modules shown here currently report planned commands and need follow-up execution-path refactors before they can be used for full deployment.
+> The VLAN, L2, L3, LAG, base interface, static route, and ACL resource modules follow the lifecycle contract and apply changes through `load_config()` outside check mode. Specialty modules that are not lifecycle-complete expose `state=rendered` for non-mutating command output and fail fast for mutating states.
 
 ```yaml
 # deploy_switch.yml
@@ -798,10 +814,10 @@ all:
           - show version
       register: version
 
-    - name: Show VLAN brief
+    - name: Show VLAN
       xike.xikeos.xikeos_command:
         commands:
-          - show vlan brief
+          - show vlan
       register: vlans
 
     - name: Show interface status
@@ -884,7 +900,7 @@ Xike switches use a Cisco IOS-like CLI with some key differences:
 | **ACL Ranges** | 1-99 (std), 100-199, 1300-2699 | 1-999 (std), 1000-1999 (MAC), 2000-2999 (mixed) |
 | **STP** | `spanning-tree mode pvst` | `stp mode pvst` |
 | **Save Config** | `write memory` | `write memory` |
-| **Show VLAN** | `show vlan brief` | `show vlan brief` |
+| **Show VLAN** | `show vlan brief` | `show vlan` |
 | **LACP** | `channel-group 1 mode active` | `eth-trunk 1 mode dynamic lacp-mode active` |
 
 ## Development
