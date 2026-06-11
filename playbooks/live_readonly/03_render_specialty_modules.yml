@@ -1,0 +1,130 @@
+---
+- name: Live read-only rendered specialty module tests
+  hosts: xike_switches
+  gather_facts: false
+
+  tasks:
+    - name: Render STP commands without applying
+      xike.xikeos.xikeos_stp:
+        config:
+          stp_mode: rstp
+          priority: 32768
+        state: rendered
+      register: xikeos_stp_rendered
+
+    - name: Render ERPS commands without applying
+      xike.xikeos.xikeos_erps:
+        instance_id: 1
+        control_vlan: 100
+        port0: ethernet 0/0/1
+        port1: ethernet 0/0/2
+        state: rendered
+      register: xikeos_erps_rendered
+
+    - name: Render EAPS commands without applying
+      xike.xikeos.xikeos_eaps:
+        domain_id: 1
+        control_vlan: 100
+        rings:
+          - ring_id: 1
+            role: transit
+        state: rendered
+      register: xikeos_eaps_rendered
+
+    - name: Render QinQ commands without applying
+      xike.xikeos.xikeos_qinq:
+        config:
+          mode: customer
+          outer_tpid: "0x8100"
+          vlan_pass_throughs:
+            - start_vlan: 100
+              end_vlan: 100
+        state: rendered
+      register: xikeos_qinq_rendered
+
+    - name: Render mirror commands without applying
+      xike.xikeos.xikeos_mirror:
+        config:
+          group_id: 1
+          source_interfaces:
+            - name: ethernet 0/0/1
+              direction: both
+          destination_interface: ethernet 0/0/2
+        state: rendered
+      register: xikeos_mirror_rendered
+
+    - name: Render port isolation commands without applying
+      xike.xikeos.xikeos_port_isolate:
+        config:
+          group_id: 1
+          members:
+            - ethernet 0/0/1
+            - ethernet 0/0/2
+        state: rendered
+      register: xikeos_port_isolate_rendered
+
+    - name: Render Flex-Link and Monitor-Link commands without applying
+      xike.xikeos.xikeos_flex_monitor_link:
+        config:
+          flex_links:
+            - group_id: 1
+              master_port:
+                type: eth
+                id: 0/0/1
+              slave_port:
+                type: eth
+                id: 0/0/2
+          monitor_links:
+            - group_id: 1
+              uplink_port:
+                type: eth
+                id: 0/0/3
+              downlink_ports:
+                - type: eth
+                  id: 0/0/4
+        state: rendered
+      register: xikeos_flex_monitor_link_rendered
+
+    - name: Render OSPFv2 commands without applying
+      xike.xikeos.xikeos_ospfv2:
+        config:
+          process_id: 1
+          router_id: 1.1.1.1
+          networks:
+            - network: 10.0.0.0
+              wildcard: 0.0.0.255
+              area: "0"
+        state: rendered
+      register: xikeos_ospfv2_rendered
+
+    - name: Assert rendered specialty modules stayed read-only
+      ansible.builtin.assert:
+        that:
+          - not xikeos_stp_rendered.changed
+          - not xikeos_erps_rendered.changed
+          - not xikeos_eaps_rendered.changed
+          - not xikeos_qinq_rendered.changed
+          - not xikeos_mirror_rendered.changed
+          - not xikeos_port_isolate_rendered.changed
+          - not xikeos_flex_monitor_link_rendered.changed
+          - not xikeos_ospfv2_rendered.changed
+          - xikeos_stp_rendered.rendered is defined
+          - xikeos_erps_rendered.rendered is defined
+          - xikeos_eaps_rendered.rendered is defined
+          - xikeos_qinq_rendered.rendered is defined
+          - xikeos_mirror_rendered.rendered is defined
+          - xikeos_port_isolate_rendered.rendered is defined
+          - xikeos_flex_monitor_link_rendered.rendered is defined
+          - xikeos_ospfv2_rendered.rendered is defined
+
+    - name: Display rendered command summary
+      ansible.builtin.debug:
+        msg:
+          stp: "{{ xikeos_stp_rendered.rendered }}"
+          erps: "{{ xikeos_erps_rendered.rendered }}"
+          eaps: "{{ xikeos_eaps_rendered.rendered }}"
+          qinq: "{{ xikeos_qinq_rendered.rendered }}"
+          mirror: "{{ xikeos_mirror_rendered.rendered }}"
+          port_isolate: "{{ xikeos_port_isolate_rendered.rendered }}"
+          flex_monitor_link: "{{ xikeos_flex_monitor_link_rendered.rendered }}"
+          ospfv2: "{{ xikeos_ospfv2_rendered.rendered }}"
