@@ -45,6 +45,9 @@ jobs:
             exit 1
           fi
 
+      - name: Install Ansible collection dependencies
+        run: uv run ansible-galaxy collection install ansible.netcommon -p .test_path
+
       - name: Run unit tests
         run: uv run pytest tests/unit
 
