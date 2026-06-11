@@ -1,0 +1,57 @@
+name: Publish collection to Galaxy
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish:
+    name: Build and publish collection
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install dependencies
+        run: uv sync --group dev
+
+      - name: Verify release tag matches galaxy.yml version
+        run: |
+          tag_version="${GITHUB_REF_NAME#v}"
+          galaxy_version="$(python3 - <<'PY'
+          from pathlib import Path
+
+          for line in Path('galaxy.yml').read_text().splitlines():
+              if line.startswith('version:'):
+                  print(line.split(':', 1)[1].strip().strip('"\''))
+                  break
+          else:
+              raise SystemExit('galaxy.yml version not found')
+          PY
+          )"
+          if [ "$tag_version" != "$galaxy_version" ]; then
+            echo "Release tag version '$tag_version' does not match galaxy.yml version '$galaxy_version'."
+            exit 1
+          fi
+
+      - name: Run unit tests
+        run: uv run pytest tests/unit
+
+      - name: Build collection
+        run: uv run ansible-galaxy collection build --force
+
+      - name: Publish collection to Galaxy
+        run: |
+          tarball="$(ls c1emon-xikeos-*.tar.gz | head -n 1)"
+          uv run ansible-galaxy collection publish "$tarball" --api-key "${{ secrets.ANSIBLE_GALAXY_API_KEY }}"

@@ -104,7 +104,7 @@ author: Andy
 
 EXAMPLES = """
 - name: Enable STP with RSTP mode
-  xike.xikeos.xikeos_stp:
+  c1emon.xikeos.xikeos_stp:
     config:
       stp_mode: rstp
       priority: 32768
@@ -114,7 +114,7 @@ EXAMPLES = """
     state: merged
 
 - name: Configure MSTP with region and instances
-  xike.xikeos.xikeos_stp:
+  c1emon.xikeos.xikeos_stp:
     config:
       stp_mode: mstp
       mstp:
@@ -130,7 +130,7 @@ EXAMPLES = """
     state: merged
 
 - name: Configure PVST instances
-  xike.xikeos.xikeos_stp:
+  c1emon.xikeos.xikeos_stp:
     config:
       stp_mode: pvst
       pvst:
@@ -142,7 +142,7 @@ EXAMPLES = """
     state: merged
 
 - name: Enable BPDU guard and set pathcost standard
-  xike.xikeos.xikeos_stp:
+  c1emon.xikeos.xikeos_stp:
     config:
       stp_mode: rstp
       bpdu_guard: true
@@ -164,7 +164,7 @@ commands:
 """
 
 from ansible.module_utils.basic import AnsibleModule
-from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.lifecycle import exit_rendered_or_fail
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import exit_rendered_or_fail
 
 
 def vlan_id_to_ranges(vlan_ids: Sequence[int]) -> str:

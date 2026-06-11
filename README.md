@@ -1,6 +1,6 @@
-# xike.xikeos Ansible Collection
+# c1emon.xikeos Ansible Collection
 
-[![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)](https://github.com/andy/xike-xikeos)
+[![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)](https://github.com/c1emon/ansible-collection-xike)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![Ansible](https://img.shields.io/badge/Ansible-%3E%3D2.15-red.svg)](https://www.ansible.com/)
 [![Python](https://img.shields.io/badge/Python-%3E%3D3.10-blue.svg)](https://www.python.org/)
@@ -9,7 +9,7 @@ Ansible Collection for managing **Xike (兮克) switches** with Cisco IOS-like C
 
 ## Overview
 
-The `xike.xikeos` collection provides Ansible modules for automating **Xike (兮克) Ethernet switches**. Xike switches use a Cisco IOS-like command-line interface, making this collection familiar to anyone with IOS experience while supporting Xike-specific features.
+The `c1emon.xikeos` collection provides Ansible modules for automating **Xike (兮克) Ethernet switches**. Xike switches use a Cisco IOS-like command-line interface, making this collection familiar to anyone with IOS experience while supporting Xike-specific features.
 
 ### Who is this for?
 
@@ -33,13 +33,13 @@ The `xike.xikeos` collection provides Ansible modules for automating **Xike (兮
 ┌─────────────────────────────────────────────────────────────────┐
 │                        Your Playbook                            │
 │   tasks:                                                        │
-│     - xike.xikeos.xikeos_vlans:                                  │
+│     - c1emon.xikeos.xikeos_vlans:                                  │
 │         config: ...                                             │
 └───────────────────────────┬─────────────────────────────────────┘
                             │
                             ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                   xike.xikeos Modules                           │
+│                   c1emon.xikeos Modules                           │
 │                                                                 │
 │  xikeos_vlans          xikeos_stp           xikeos_erps         │
 │  xikeos_interfaces     xikeos_mirror        xikeos_eaps         │
@@ -60,7 +60,7 @@ The `xike.xikeos` collection provides Ansible modules for automating **Xike (兮
                             ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │        ansible.netcommon.network_cli + terminal/cliconf          │
-│        ansible_network_os: xike.xikeos.xikeos                    │
+│        ansible_network_os: c1emon.xikeos.xikeos                    │
 └───────────────────────────┬─────────────────────────────────────┘
                             │
                             ▼
@@ -107,16 +107,16 @@ missing template name and expected path.
 ### From Ansible Galaxy (once published)
 
 ```bash
-ansible-galaxy collection install xike.xikeos
+ansible-galaxy collection install c1emon.xikeos
 ```
 
 ### From Source
 
 ```bash
-git clone https://github.com/andy/xike-xikeos.git
-cd xike-xikeos
+git clone https://github.com/c1emon/ansible-collection-xike.git
+cd ansible-collection-xike
 ansible-galaxy collection build
-ansible-galaxy collection install xike-xikeos-0.1.0.tar.gz
+ansible-galaxy collection install c1emon-xikeos-0.1.0.tar.gz
 ```
 
 ### From Local Development Directory
@@ -126,14 +126,19 @@ ansible-galaxy collection install xike-xikeos-0.1.0.tar.gz
 ansible-galaxy collection install /path/to/xike-xikeos/
 
 # Or symlink for development
-ln -s /path/to/xike-xikeos ~/.ansible/collections/ansible_collections/xike/xikeos
+ln -s /path/to/xike-xikeos ~/.ansible/collections/ansible_collections/c1emon/xikeos
+
+# Or expose this checkout for live playbooks/tests
+mkdir -p .test_path/ansible_collections/c1emon
+ln -sfn "$PWD" .test_path/ansible_collections/c1emon/xikeos
+export ANSIBLE_COLLECTIONS_PATH=.test_path
 ```
 
 ### Development Setup
 
 ```bash
-git clone https://github.com/andy/xike-xikeos.git
-cd xike-xikeos
+git clone https://github.com/c1emon/ansible-collection-xike.git
+cd ansible-collection-xike
 
 # Create virtual environment
 python3 -m venv venv
@@ -145,6 +150,29 @@ uv sync --group dev
 # Run tests
 uv run pytest -q tests/unit
 ```
+
+## Galaxy Release Publishing
+
+Publishing to Ansible Galaxy is driven by GitHub Releases. Before publishing,
+configure the repository secret `ANSIBLE_GALAXY_API_KEY` with a Galaxy API token.
+
+Release process:
+
+1. Update `galaxy.yml` `version` to a new, never-published version.
+2. Commit and merge the release changes.
+3. Create and publish a GitHub Release whose tag matches `galaxy.yml` version;
+   a leading `v` is allowed, for example `v0.1.0` for `version: 0.1.0`.
+4. The release workflow runs `uv sync --group dev`, `uv run pytest tests/unit`,
+   verifies the release tag matches `galaxy.yml`, builds the collection with
+   `uv run ansible-galaxy collection build --force`, and publishes the generated
+   `c1emon-xikeos-<version>.tar.gz` with the configured Galaxy API key.
+
+Galaxy collection versions are immutable: once a version is published, it cannot
+be replaced by rerunning the workflow. If a release needs changes, bump
+`galaxy.yml` to a new version before publishing again.
+
+Automation Hub and Private Automation Hub publishing are out of scope for this
+workflow; it publishes only to community Ansible Galaxy.
 
 ## Quick Start
 
@@ -160,7 +188,7 @@ all:
           ansible_host: 192.168.1.100
           ansible_user: admin
           ansible_password: "{{ vault_switch_password }}"
-          ansible_network_os: xike.xikeos.xikeos
+          ansible_network_os: c1emon.xikeos.xikeos
           ansible_connection: ansible.netcommon.network_cli
 ```
 
@@ -174,7 +202,7 @@ all:
   gather_facts: no
   tasks:
     - name: Create VLANs
-      xike.xikeos.xikeos_vlans:
+      c1emon.xikeos.xikeos_vlans:
         config:
           - vlan_id: 100
             name: DATA
@@ -204,7 +232,7 @@ all:
           ansible_port: 22                     # SSH port (default: 22)
           ansible_user: admin                  # Login username
           ansible_password: secret             # Login password (use vault!)
-          ansible_network_os: xike.xikeos.xikeos  # Collection platform FQCN
+          ansible_network_os: c1emon.xikeos.xikeos  # Collection platform FQCN
           ansible_connection: ansible.netcommon.network_cli
           ansible_become: yes                  # Enable privilege escalation
           ansible_become_method: enable        # Enable mode method
@@ -214,13 +242,13 @@ all:
           ansible_host: 192.168.1.101
           ansible_user: admin
           ansible_password: "{{ vault_access_sw_password }}"
-          ansible_network_os: xike.xikeos.xikeos
+          ansible_network_os: c1emon.xikeos.xikeos
           ansible_connection: ansible.netcommon.network_cli
 
     # Group variables (apply to all switches in group)
     xike_switches:
       vars:
-        ansible_network_os: xike.xikeos.xikeos
+        ansible_network_os: c1emon.xikeos.xikeos
         ansible_connection: ansible.netcommon.network_cli
         ansible_user: admin
         ansible_become: yes
@@ -315,7 +343,7 @@ all:
 ```yaml
 # Create VLANs
 - name: Create VLANs
-  xike.xikeos.xikeos_vlans:
+  c1emon.xikeos.xikeos_vlans:
     config:
       - vlan_id: 100
         name: DATA
@@ -327,7 +355,7 @@ all:
 
 # Replace all VLAN configuration
 - name: Replace VLANs
-  xike.xikeos.xikeos_vlans:
+  c1emon.xikeos.xikeos_vlans:
     config:
       - vlan_id: 100
         name: SALES
@@ -335,7 +363,7 @@ all:
 
 # Delete VLANs
 - name: Remove VLANs
-  xike.xikeos.xikeos_vlans:
+  c1emon.xikeos.xikeos_vlans:
     config:
       - vlan_id: 200
       - vlan_id: 300
@@ -349,7 +377,7 @@ all:
 ```yaml
 # Configure interface properties
 - name: Set interface parameters
-  xike.xikeos.xikeos_interfaces:
+  c1emon.xikeos.xikeos_interfaces:
     config:
       - name: ethernet 0/0/1
         description: Uplink to core
@@ -361,7 +389,7 @@ all:
 
 # Shutdown an interface
 - name: Disable interface
-  xike.xikeos.xikeos_interfaces:
+  c1emon.xikeos.xikeos_interfaces:
     config:
       - name: ethernet 0/0/24
         enabled: false
@@ -375,7 +403,7 @@ all:
 ```yaml
 # Access port
 - name: Configure access port
-  xike.xikeos.xikeos_l2_interfaces:
+  c1emon.xikeos.xikeos_l2_interfaces:
     config:
       - name: ethernet 0/0/1
         mode: access
@@ -384,7 +412,7 @@ all:
 
 # Trunk port
 - name: Configure trunk port
-  xike.xikeos.xikeos_l2_interfaces:
+  c1emon.xikeos.xikeos_l2_interfaces:
     config:
       - name: ethernet 0/0/24
         mode: trunk
@@ -393,7 +421,7 @@ all:
 
 # Hybrid port (Xike-specific feature)
 - name: Configure hybrid port
-  xike.xikeos.xikeos_l2_interfaces:
+  c1emon.xikeos.xikeos_l2_interfaces:
     config:
       - name: ethernet 0/0/3
         mode: hybrid
@@ -410,7 +438,7 @@ all:
 ```yaml
 # Configure SVI IP address
 - name: Set VLAN interface IP
-  xike.xikeos.xikeos_l3_interfaces:
+  c1emon.xikeos.xikeos_l3_interfaces:
     config:
       - name: vlan-interface 100
         ipv4:
@@ -420,7 +448,7 @@ all:
 
 # IPv6 on VLAN interface
 - name: Set IPv6 address
-  xike.xikeos.xikeos_l3_interfaces:
+  c1emon.xikeos.xikeos_l3_interfaces:
     config:
       - name: vlan-interface 200
         ipv6:
@@ -433,7 +461,7 @@ all:
 ```yaml
 # Create static eth-trunk
 - name: Create static LAG
-  xike.xikeos.xikeos_lag_interfaces:
+  c1emon.xikeos.xikeos_lag_interfaces:
     config:
       - name: eth-trunk 1
         mode: static
@@ -444,7 +472,7 @@ all:
 
 # Create dynamic eth-trunk with LACP
 - name: Create LACP LAG
-  xike.xikeos.xikeos_lag_interfaces:
+  c1emon.xikeos.xikeos_lag_interfaces:
     config:
       - name: eth-trunk 2
         mode: dynamic
@@ -460,7 +488,7 @@ all:
 ```yaml
 # Basic OSPF configuration
 - name: Configure OSPF
-  xike.xikeos.xikeos_ospfv2:
+  c1emon.xikeos.xikeos_ospfv2:
     config:
       process_id: 1
       router_id: 1.1.1.1
@@ -475,7 +503,7 @@ all:
 
 # OSPF with redistribution
 - name: Configure OSPF with redistribution
-  xike.xikeos.xikeos_ospfv2:
+  c1emon.xikeos.xikeos_ospfv2:
     config:
       process_id: 1
       router_id: 1.1.1.1
@@ -501,7 +529,7 @@ all:
 ```yaml
 # Add IPv4 static route
 - name: Configure static route
-  xike.xikeos.xikeos_static_routes:
+  c1emon.xikeos.xikeos_static_routes:
     config:
       - destination: 192.168.100.0
         mask: 255.255.255.0
@@ -512,7 +540,7 @@ all:
 
 # Add IPv6 static route
 - name: Configure IPv6 route
-  xike.xikeos.xikeos_static_routes:
+  c1emon.xikeos.xikeos_static_routes:
     config:
       - destination: "2001:db8::"
         mask: "48"
@@ -526,7 +554,7 @@ all:
 ```yaml
 # Standard ACL (1-999)
 - name: Create standard IP ACL
-  xike.xikeos.xikeos_acls:
+  c1emon.xikeos.xikeos_acls:
     config:
       - acl_id: 100
         acl_type: standard
@@ -542,7 +570,7 @@ all:
 
 # MAC ACL (1000-1999)
 - name: Create MAC ACL
-  xike.xikeos.xikeos_acls:
+  c1emon.xikeos.xikeos_acls:
     config:
       - acl_id: 1001
         acl_type: mac
@@ -556,7 +584,7 @@ all:
 
 # Mixed/Extended ACL (2000-2999)
 - name: Create mixed ACL
-  xike.xikeos.xikeos_acls:
+  c1emon.xikeos.xikeos_acls:
     config:
       - acl_id: 2001
         acl_type: mixed
@@ -575,7 +603,7 @@ all:
 ```yaml
 # Configure MSTP
 - name: Set STP mode to MSTP
-  xike.xikeos.xikeos_stp:
+  c1emon.xikeos.xikeos_stp:
     config:
       stp_mode: mstp
       priority: 4096
@@ -600,7 +628,7 @@ all:
 ```yaml
 # Create mirror group
 - name: Set up port mirroring
-  xike.xikeos.xikeos_mirror:
+  c1emon.xikeos.xikeos_mirror:
     config:
       group_id: 1
       source_interfaces:
@@ -613,7 +641,7 @@ all:
 
 # Remove mirror group
 - name: Delete mirror group
-  xike.xikeos.xikeos_mirror:
+  c1emon.xikeos.xikeos_mirror:
     config:
       group_id: 1
     state: absent
@@ -624,7 +652,7 @@ all:
 ```yaml
 # Configure ERPS instance
 - name: Configure ERPS
-  xike.xikeos.xikeos_erps:
+  c1emon.xikeos.xikeos_erps:
     instance_id: 1
     control_vlan: 100
     port0: "ethernet 0/0/1"
@@ -642,7 +670,7 @@ all:
 ```yaml
 # Configure EAPS domain
 - name: Configure EAPS
-  xike.xikeos.xikeos_eaps:
+  c1emon.xikeos.xikeos_eaps:
     domain_id: 1
     control_vlan: 100
     rings:
@@ -661,7 +689,7 @@ all:
 ```yaml
 # Configure QinQ
 - name: Set up QinQ
-  xike.xikeos.xikeos_qinq:
+  c1emon.xikeos.xikeos_qinq:
     config:
       mode: customer
       inner_tpid: "0x8100"
@@ -682,7 +710,7 @@ all:
 ```yaml
 # Configure Flex-Link backup
 - name: Configure Flex-Link
-  xike.xikeos.xikeos_flex_monitor_link:
+  c1emon.xikeos.xikeos_flex_monitor_link:
     config:
       flex_links:
         - group_id: 1
@@ -710,7 +738,7 @@ all:
 ```yaml
 # Create port isolation group
 - name: Isolate access ports
-  xike.xikeos.xikeos_port_isolate:
+  c1emon.xikeos.xikeos_port_isolate:
     config:
       group_id: 1
       members:
@@ -732,7 +760,7 @@ all:
   gather_facts: no
   tasks:
     - name: Run show running-config
-      xike.xikeos.xikeos_command:
+      c1emon.xikeos.xikeos_command:
         commands:
           - show running-config
       register: config_output
@@ -756,7 +784,7 @@ all:
   gather_facts: no
   tasks:
     - name: Create VLANs
-      xike.xikeos.xikeos_vlans:
+      c1emon.xikeos.xikeos_vlans:
         config:
           - vlan_id: 100
             name: DATA
@@ -765,7 +793,7 @@ all:
         state: merged
 
     - name: Plan L3 interface configuration
-      xike.xikeos.xikeos_l3_interfaces:
+      c1emon.xikeos.xikeos_l3_interfaces:
         config:
           - name: vlan-interface 100
             ipv4:
@@ -774,7 +802,7 @@ all:
         state: merged
 
     - name: Plan access port configuration
-      xike.xikeos.xikeos_l2_interfaces:
+      c1emon.xikeos.xikeos_l2_interfaces:
         config:
           - name: ethernet 0/0/1
             mode: access
@@ -785,7 +813,7 @@ all:
         state: merged
 
     - name: Plan trunk uplink configuration
-      xike.xikeos.xikeos_l2_interfaces:
+      c1emon.xikeos.xikeos_l2_interfaces:
         config:
           - name: ethernet 0/0/24
             mode: trunk
@@ -793,7 +821,7 @@ all:
         state: merged
 
     - name: Save configuration
-      xike.xikeos.xikeos_config:
+      c1emon.xikeos.xikeos_config:
         lines:
           - hostname deployed-switch
         save: true
@@ -809,25 +837,25 @@ all:
   gather_facts: no
   tasks:
     - name: Show version
-      xike.xikeos.xikeos_command:
+      c1emon.xikeos.xikeos_command:
         commands:
           - show version
       register: version
 
     - name: Show VLAN
-      xike.xikeos.xikeos_command:
+      c1emon.xikeos.xikeos_command:
         commands:
           - show vlan
       register: vlans
 
     - name: Show interface status
-      xike.xikeos.xikeos_command:
+      c1emon.xikeos.xikeos_command:
         commands:
           - show interface status
       register: interfaces
 
     - name: Show spanning-tree
-      xike.xikeos.xikeos_command:
+      c1emon.xikeos.xikeos_command:
         commands:
           - show spanning-tree
       register: stp

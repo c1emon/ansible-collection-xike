@@ -8,7 +8,7 @@ __metaclass__ = type
 from typing import Any, Optional, TYPE_CHECKING
 
 from ansible.module_utils.common.text.converters import to_text
-from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.xikeos import run_commands
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.xikeos import run_commands
 
 if TYPE_CHECKING:
     from ansible.module_utils.basic import AnsibleModule

@@ -8,7 +8,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.lifecycle import run_resource_module_lifecycle
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import run_resource_module_lifecycle
 
 from .lifecycle_helpers import ExitJson, fake_module
 

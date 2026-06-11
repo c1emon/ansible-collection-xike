@@ -5,7 +5,7 @@
 
   tasks:
     - name: Read version and VLAN command output
-      xike.xikeos.xikeos_command:
+      c1emon.xikeos.xikeos_command:
         commands:
           - show version
           - show vlan
@@ -20,7 +20,7 @@
         var: xikeos_show_output.stdout_lines[1]
 
     - name: Gather structured VLAN state
-      xike.xikeos.xikeos_vlans:
+      c1emon.xikeos.xikeos_vlans:
         state: gathered
       register: xikeos_vlan_state
 

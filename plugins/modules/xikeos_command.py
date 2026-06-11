@@ -26,7 +26,7 @@ author: Andy
 
 EXAMPLES = """
 - name: Show version
-  xike.xikeos.xikeos_command:
+  c1emon.xikeos.xikeos_command:
     commands:
       - show version
       - show vlan
@@ -38,7 +38,7 @@ EXAMPLES = """
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.common.text.converters import to_text
-from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.xikeos import run_commands
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.xikeos import run_commands
 
 
 def _split_lines(output: Any) -> list[str]:

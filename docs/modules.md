@@ -1,6 +1,6 @@
-# xike.xikeos Module Reference
+# c1emon.xikeos Module Reference
 
-Complete reference for all 17 modules in the `xike.xikeos` collection.
+Complete reference for all 17 modules in the `c1emon.xikeos` collection.
 
 Resource-module state behavior is explicit:
 
@@ -74,7 +74,7 @@ no shutdown
 **Example**:
 ```yaml
 - name: Configure interface
-  xike.xikeos.xikeos_interfaces:
+  c1emon.xikeos.xikeos_interfaces:
     config:
       - name: ethernet 0/0/1
         description: Uplink to core
@@ -140,7 +140,7 @@ switchport hybrid tagged vlan 30,40
 ```yaml
 # Access port
 - name: Configure access port
-  xike.xikeos.xikeos_l2_interfaces:
+  c1emon.xikeos.xikeos_l2_interfaces:
     config:
       - name: ethernet 0/0/1
         mode: access
@@ -149,7 +149,7 @@ switchport hybrid tagged vlan 30,40
 
 # Hybrid port (Xike-specific)
 - name: Configure hybrid port
-  xike.xikeos.xikeos_l2_interfaces:
+  c1emon.xikeos.xikeos_l2_interfaces:
     config:
       - name: ethernet 0/0/3
         mode: hybrid
@@ -194,7 +194,7 @@ ipv6 address 2001:db8::1/64
 **Example**:
 ```yaml
 - name: Configure VLAN interface IP
-  xike.xikeos.xikeos_l3_interfaces:
+  c1emon.xikeos.xikeos_l3_interfaces:
     config:
       - name: vlan-interface 100
         ipv4:
@@ -241,7 +241,7 @@ lacp mode active
 ```yaml
 # Static LAG
 - name: Create static eth-trunk
-  xike.xikeos.xikeos_lag_interfaces:
+  c1emon.xikeos.xikeos_lag_interfaces:
     config:
       - name: eth-trunk 1
         mode: static
@@ -252,7 +252,7 @@ lacp mode active
 
 # Dynamic LAG with LACP
 - name: Create LACP LAG
-  xike.xikeos.xikeos_lag_interfaces:
+  c1emon.xikeos.xikeos_lag_interfaces:
     config:
       - name: eth-trunk 2
         mode: dynamic
@@ -299,7 +299,7 @@ exit
 ```yaml
 # Create VLANs
 - name: Create VLANs
-  xike.xikeos.xikeos_vlans:
+  c1emon.xikeos.xikeos_vlans:
     config:
       - vlan_id: 100
         name: DATA
@@ -311,7 +311,7 @@ exit
 
 # Delete VLANs
 - name: Remove VLANs
-  xike.xikeos.xikeos_vlans:
+  c1emon.xikeos.xikeos_vlans:
     config:
       - vlan_id: 200
       - vlan_id: 300
@@ -368,7 +368,7 @@ passive-interface vlan-interface 10
 **Example**:
 ```yaml
 - name: Configure OSPF
-  xike.xikeos.xikeos_ospfv2:
+  c1emon.xikeos.xikeos_ospfv2:
     config:
       process_id: 1
       router_id: 1.1.1.1
@@ -425,7 +425,7 @@ ipv6 route 2001:db8::/32 2001:db8::1
 ```yaml
 # IPv4 static route
 - name: Configure static route
-  xike.xikeos.xikeos_static_routes:
+  c1emon.xikeos.xikeos_static_routes:
     config:
       - destination: 192.168.100.0
         mask: 255.255.255.0
@@ -436,7 +436,7 @@ ipv6 route 2001:db8::/32 2001:db8::1
 
 # IPv6 static route
 - name: Configure IPv6 route
-  xike.xikeos.xikeos_static_routes:
+  c1emon.xikeos.xikeos_static_routes:
     config:
       - destination: "2001:db8::"
         mask: "48"
@@ -504,7 +504,7 @@ access-list 2001 deny tcp any any
 ```yaml
 # Standard ACL
 - name: Create standard IP ACL
-  xike.xikeos.xikeos_acls:
+  c1emon.xikeos.xikeos_acls:
     config:
       - acl_id: 100
         acl_type: standard
@@ -520,7 +520,7 @@ access-list 2001 deny tcp any any
 
 # Mixed/Extended ACL
 - name: Create mixed ACL
-  xike.xikeos.xikeos_acls:
+  c1emon.xikeos.xikeos_acls:
     config:
       - acl_id: 2001
         acl_type: mixed
@@ -584,7 +584,7 @@ mstp instance 1 vlan 10-20
 ```yaml
 # Configure MSTP
 - name: Set STP mode to MSTP
-  xike.xikeos.xikeos_stp:
+  c1emon.xikeos.xikeos_stp:
     config:
       stp_mode: mstp
       priority: 4096
@@ -637,7 +637,7 @@ mirror group 1 destination-interface ethernet 0/0/10
 ```yaml
 # Create mirror group
 - name: Create mirror group
-  xike.xikeos.xikeos_mirror:
+  c1emon.xikeos.xikeos_mirror:
     config:
       group_id: 1
       source_interfaces:
@@ -650,7 +650,7 @@ mirror group 1 destination-interface ethernet 0/0/10
 
 # Add CPU source
 - name: Add CPU mirror source
-  xike.xikeos.xikeos_mirror:
+  c1emon.xikeos.xikeos_mirror:
     config:
       group_id: 1
       source_interfaces:
@@ -693,7 +693,7 @@ exit
 ```yaml
 # Create isolation group
 - name: Create port isolation group
-  xike.xikeos.xikeos_port_isolate:
+  c1emon.xikeos.xikeos_port_isolate:
     config:
       group_id: 1
       members:
@@ -704,7 +704,7 @@ exit
 
 # Add all ports
 - name: Add all ports to isolation
-  xike.xikeos.xikeos_port_isolate:
+  c1emon.xikeos.xikeos_port_isolate:
     config:
       group_id: 2
       members:
@@ -759,7 +759,7 @@ ring enable
 ```yaml
 # Configure ERPS instance
 - name: Configure ERPS
-  xike.xikeos.xikeos_erps:
+  c1emon.xikeos.xikeos_erps:
     instance_id: 1
     control_vlan: 100
     port0: "ethernet 1 owner"
@@ -814,7 +814,7 @@ ring 2 role transit
 ```yaml
 # Configure EAPS domain
 - name: Configure EAPS
-  xike.xikeos.xikeos_eaps:
+  c1emon.xikeos.xikeos_eaps:
     domain_id: 1
     control_vlan: 100
     work_mode: standard
@@ -872,7 +872,7 @@ vlan swap 100 199 900 priority 3
 ```yaml
 # Configure QinQ
 - name: Set QinQ mode
-  xike.xikeos.xikeos_qinq:
+  c1emon.xikeos.xikeos_qinq:
     config:
       mode: customer
       inner_tpid: "0x8100"
@@ -934,7 +934,7 @@ exit
 ```yaml
 # Configure Flex-Link
 - name: Configure Flex-Link group
-  xike.xikeos.xikeos_flex_monitor_link:
+  c1emon.xikeos.xikeos_flex_monitor_link:
     config:
       flex_links:
         - group_id: 1
@@ -949,7 +949,7 @@ exit
 
 # Configure Monitor-Link
 - name: Configure Monitor-Link
-  xike.xikeos.xikeos_flex_monitor_link:
+  c1emon.xikeos.xikeos_flex_monitor_link:
     config:
       monitor_links:
         - group_id: 1
@@ -997,7 +997,7 @@ write memory
 **Example**:
 ```yaml
 - name: Push raw config
-  xike.xikeos.xikeos_config:
+  c1emon.xikeos.xikeos_config:
     lines:
       - vlan 100
       - name DATA
@@ -1025,7 +1025,7 @@ Execute read-only show commands on Xike switches.
 **Example**:
 ```yaml
 - name: Show version
-  xike.xikeos.xikeos_command:
+  c1emon.xikeos.xikeos_command:
     commands:
       - show version
       - show vlan

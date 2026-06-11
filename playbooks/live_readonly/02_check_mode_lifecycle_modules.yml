@@ -5,42 +5,42 @@
 
   tasks:
     - name: Check base interface lifecycle with empty config
-      xike.xikeos.xikeos_interfaces:
+      c1emon.xikeos.xikeos_interfaces:
         config: []
         state: merged
       check_mode: true
       register: xikeos_interfaces_check
 
     - name: Check L2 interface lifecycle with empty config
-      xike.xikeos.xikeos_l2_interfaces:
+      c1emon.xikeos.xikeos_l2_interfaces:
         config: []
         state: merged
       check_mode: true
       register: xikeos_l2_interfaces_check
 
     - name: Check L3 interface lifecycle with empty config
-      xike.xikeos.xikeos_l3_interfaces:
+      c1emon.xikeos.xikeos_l3_interfaces:
         config: []
         state: merged
       check_mode: true
       register: xikeos_l3_interfaces_check
 
     - name: Check LAG interface lifecycle with empty config
-      xike.xikeos.xikeos_lag_interfaces:
+      c1emon.xikeos.xikeos_lag_interfaces:
         config: []
         state: merged
       check_mode: true
       register: xikeos_lag_interfaces_check
 
     - name: Check static routes lifecycle with empty config
-      xike.xikeos.xikeos_static_routes:
+      c1emon.xikeos.xikeos_static_routes:
         config: []
         state: merged
       check_mode: true
       register: xikeos_static_routes_check
 
     - name: Check ACL lifecycle with empty config
-      xike.xikeos.xikeos_acls:
+      c1emon.xikeos.xikeos_acls:
         config: []
         state: merged
       check_mode: true

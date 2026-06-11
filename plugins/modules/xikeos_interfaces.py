@@ -51,7 +51,7 @@ author: Andy
 
 EXAMPLES = """
 - name: Configure interface ethernet 0/0/1
-  xike.xikeos.xikeos_interfaces:
+  c1emon.xikeos.xikeos_interfaces:
     config:
       - name: ethernet 0/0/1
         description: Uplink to core
@@ -62,7 +62,7 @@ EXAMPLES = """
     state: merged
 
 - name: Replace all interface config
-  xike.xikeos.xikeos_interfaces:
+  c1emon.xikeos.xikeos_interfaces:
     config:
       - name: ethernet 0/0/2
         speed: auto
@@ -86,9 +86,9 @@ commands:
 """
 
 from ansible.module_utils.basic import AnsibleModule
-from ansible_collections.xike.xikeos.plugins.module_utils.facts.interfaces import InterfacesFacts
-from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config
-from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.lifecycle import run_resource_module_lifecycle
+from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.interfaces import InterfacesFacts
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import run_resource_module_lifecycle
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:

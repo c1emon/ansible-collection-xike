@@ -57,7 +57,7 @@ author: Andy
 
 EXAMPLES = """
 - name: Configure IPv4 address on VLAN interface
-  xike.xikeos.xikeos_l3_interfaces:
+  c1emon.xikeos.xikeos_l3_interfaces:
     config:
       - name: vlan-interface 100
         ipv4:
@@ -66,7 +66,7 @@ EXAMPLES = """
     state: merged
 
 - name: Configure IPv4 and IPv6 on VLAN interface
-  xike.xikeos.xikeos_l3_interfaces:
+  c1emon.xikeos.xikeos_l3_interfaces:
     config:
       - name: vlan-interface 1
         ipv4:
@@ -77,7 +77,7 @@ EXAMPLES = """
     state: merged
 
 - name: Replace all L3 interface configs
-  xike.xikeos.xikeos_l3_interfaces:
+  c1emon.xikeos.xikeos_l3_interfaces:
     config:
       - name: vlan-interface 10
         ipv4:
@@ -105,8 +105,8 @@ commands:
 """
 
 from ansible.module_utils.basic import AnsibleModule
-from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config
-from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.lifecycle import run_resource_module_lifecycle
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import run_resource_module_lifecycle
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -116,7 +116,7 @@ L3InterfaceConfig = dict[str, Any]
 L3InterfaceState = dict[str, L3InterfaceConfig]
 
 try:
-    from ansible_collections.xike.xikeos.plugins.module_utils.facts.l3_interfaces import (
+    from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.l3_interfaces import (
         L3InterfacesFacts,
     )
     HAS_FACTS = True

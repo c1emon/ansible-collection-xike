@@ -27,8 +27,8 @@ When running directly from this source checkout, expose it as a local Ansible
 collection under `.test_path` first:
 
 ```bash
-mkdir -p .test_path/ansible_collections/xike
-ln -sfn "$PWD" .test_path/ansible_collections/xike/xikeos
+mkdir -p .test_path/ansible_collections/c1emon
+ln -sfn "$PWD" .test_path/ansible_collections/c1emon/xikeos
 export ANSIBLE_COLLECTIONS_PATH=.test_path
 export XIKEOS_PASSWORD='your-login-password'
 export XIKEOS_ENABLE_PASSWORD='your-enable-password'  # optional; defaults to XIKEOS_PASSWORD

@@ -10,7 +10,7 @@ from typing import Any
 
 import re
 
-from ansible_collections.xike.xikeos.plugins.module_utils.xikeos import (
+from ansible_collections.c1emon.xikeos.plugins.module_utils.xikeos import (
     COMMAND_MAP,
 )
 

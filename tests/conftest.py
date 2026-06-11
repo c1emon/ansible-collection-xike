@@ -1,6 +1,6 @@
 """Conftest for xike-xikeos unit tests.
 
-Sets up Python path so that ``ansible_collections.xike.xikeos`` imports
+Sets up Python path so that ``ansible_collections.c1emon.xikeos`` imports
 resolve to the local collection root without requiring a full Ansible
 installation.
 """
@@ -15,12 +15,12 @@ COLLECTION_ROOT = Path(__file__).resolve().parent.parent
 # We need a directory structure like:
 #   <temp>/
 #     ansible_collections/
-#       xike/
+#       c1emon/
 #         xikeos/   <-- symlink or actual dir -> COLLECTION_ROOT
 #
-# Create a wrapper so ``import ansible_collections.xike.xikeos`` works.
+# Create a wrapper so ``import ansible_collections.c1emon.xikeos`` works.
 
-_COLLECTION_PARENT = COLLECTION_ROOT / ".test_path" / "ansible_collections" / "xike"
+_COLLECTION_PARENT = COLLECTION_ROOT / ".test_path" / "ansible_collections" / "c1emon"
 _COLLECTION_LINK = _COLLECTION_PARENT / "xikeos"
 
 

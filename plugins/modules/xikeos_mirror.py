@@ -61,7 +61,7 @@ author: Andy
 
 EXAMPLES = """
 - name: Create a mirror group with source and destination
-  xike.xikeos.xikeos_mirror:
+  c1emon.xikeos.xikeos_mirror:
     config:
       group_id: 1
       source_interfaces:
@@ -73,7 +73,7 @@ EXAMPLES = """
     state: present
 
 - name: Add a CPU source to an existing mirror group
-  xike.xikeos.xikeos_mirror:
+  c1emon.xikeos.xikeos_mirror:
     config:
       group_id: 1
       source_interfaces:
@@ -82,7 +82,7 @@ EXAMPLES = """
     state: present
 
 - name: Remove a specific source interface from a mirror group
-  xike.xikeos.xikeos_mirror:
+  c1emon.xikeos.xikeos_mirror:
     config:
       group_id: 1
       source_interfaces:
@@ -90,7 +90,7 @@ EXAMPLES = """
     state: absent
 
 - name: Delete an entire mirror group
-  xike.xikeos.xikeos_mirror:
+  c1emon.xikeos.xikeos_mirror:
     config:
       group_id: 1
     state: absent
@@ -108,7 +108,7 @@ commands:
 """
 
 from ansible.module_utils.basic import AnsibleModule
-from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.lifecycle import exit_rendered_or_fail
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import exit_rendered_or_fail
 
 
 def _format_port(port_spec: Mapping[str, str] | None) -> str | None:

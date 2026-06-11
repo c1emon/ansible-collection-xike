@@ -5,7 +5,7 @@
 
   tasks:
     - name: Gather VLAN state through resource lifecycle
-      xike.xikeos.xikeos_vlans:
+      c1emon.xikeos.xikeos_vlans:
         state: gathered
       register: xikeos_gathered_vlans
 
