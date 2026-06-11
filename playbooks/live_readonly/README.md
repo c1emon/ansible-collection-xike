@@ -30,6 +30,8 @@ collection under `.test_path` first:
 mkdir -p .test_path/ansible_collections/xike
 ln -sfn "$PWD" .test_path/ansible_collections/xike/xikeos
 export ANSIBLE_COLLECTIONS_PATH=.test_path
+export XIKEOS_PASSWORD='your-login-password'
+export XIKEOS_ENABLE_PASSWORD='your-enable-password'  # optional; defaults to XIKEOS_PASSWORD
 ```
 
 ```bash
