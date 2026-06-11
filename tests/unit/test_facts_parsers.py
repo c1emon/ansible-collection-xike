@@ -9,26 +9,26 @@ import types
 import pytest
 
 # Import parsers directly (no device connection needed)
-from ansible_collections.xike.xikeos.plugins.module_utils.facts.vlans import (
+from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.vlans import (
     SHOW_VLAN_TEMPLATE,
     parse_vlan,
 )
-from ansible_collections.xike.xikeos.plugins.module_utils.facts.textfsm_parser import (
+from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.textfsm_parser import (
     parse_textfsm_template,
 )
-from ansible_collections.xike.xikeos.plugins.module_utils.facts.ttp_parser import (
+from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.ttp_parser import (
     _load_ttp_template,
     parse_ttp_template,
 )
-from ansible_collections.xike.xikeos.plugins.module_utils.facts.interfaces import (
+from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.interfaces import (
     parse_interface_brief,
 )
-from ansible_collections.xike.xikeos.plugins.module_utils.facts.ospfv2 import (
+from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.ospfv2 import (
     parse_ospf_neighbors,
     parse_ospf_summary,
     parse_running_config,
 )
-from ansible_collections.xike.xikeos.plugins.module_utils.facts.stp import (
+from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.stp import (
     parse_stp_brief,
     parse_vlan_ranges,
 )
@@ -237,7 +237,7 @@ VLAN Name         Type       Media     Ports
 
         with pytest.MonkeyPatch.context() as mp:
             mp.setitem(sys.modules, "textfsm", fake_textfsm)
-            mp.setattr("ansible_collections.xike.xikeos.plugins.module_utils.facts.textfsm_parser.os.path.isfile", lambda *_: False)
+            mp.setattr("ansible_collections.c1emon.xikeos.plugins.module_utils.facts.textfsm_parser.os.path.isfile", lambda *_: False)
             result = parse_textfsm_template(
                 self.SAMPLE_OUTPUT,
                 "show_vlan.textfsm",
@@ -253,7 +253,7 @@ VLAN Name         Type       Media     Ports
 
         with pytest.raises(FileNotFoundError, match="Bundled TTP template 'missing.ttp' was not injected and was not found"):
             with pytest.MonkeyPatch.context() as mp:
-                mp.setattr("ansible_collections.xike.xikeos.plugins.module_utils.facts.ttp_parser.os.path.isfile", lambda *_: False)
+                mp.setattr("ansible_collections.c1emon.xikeos.plugins.module_utils.facts.ttp_parser.os.path.isfile", lambda *_: False)
                 _load_ttp_template("missing.ttp")
 
     def test_ttp_parser_accepts_injected_template_without_local_file(self):

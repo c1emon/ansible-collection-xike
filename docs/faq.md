@@ -1,6 +1,6 @@
-# xike.xikeos FAQ
+# c1emon.xikeos FAQ
 
-Frequently asked questions about the `xike.xikeos` Ansible Collection.
+Frequently asked questions about the `c1emon.xikeos` Ansible Collection.
 
 ## General
 
@@ -26,9 +26,9 @@ The supported architecture uses **`ansible.netcommon.network_cli`** with this co
 
 ### Difference from cisco.ios collection?
 
-The `xike.xikeos` collection is specifically designed for **Xike (兮克) switches**, while `cisco.ios` targets **Cisco IOS/IOS-XE** devices. Key differences:
+The `c1emon.xikeos` collection is specifically designed for **Xike (兮克) switches**, while `cisco.ios` targets **Cisco IOS/IOS-XE** devices. Key differences:
 
-| Aspect | xike.xikeos | cisco.ios |
+| Aspect | c1emon.xikeos | cisco.ios |
 |--------|-------------|-----------|
 | **Target** | Xike switches | Cisco IOS/IOS-XE |
 | **CLI Syntax** | Xike-specific (IOS-like) | Cisco IOS |
@@ -42,7 +42,7 @@ The `xike.xikeos` collection is specifically designed for **Xike (兮克) switch
 
 **When to use which**:
 - Use `cisco.ios` for Cisco IOS/IOS-XE devices
-- Use `xike.xikeos` for Xike (兮克) switches
+- Use `c1emon.xikeos` for Xike (兮克) switches
 - Both cannot be used interchangeably
 
 ---
@@ -58,7 +58,7 @@ Hybrid port mode is a **Xike-specific feature** not found on Cisco switches. It 
 **Configuration Example**:
 ```yaml
 - name: Configure hybrid port
-  xike.xikeos.xikeos_l2_interfaces:
+  c1emon.xikeos.xikeos_l2_interfaces:
     config:
       - name: ethernet 0/0/3
         mode: hybrid
@@ -111,7 +111,7 @@ all:
           ansible_port: 22                    # SSH port
           ansible_user: admin                 # Username
           ansible_password: "secret"          # Password
-          ansible_network_os: xike.xikeos.xikeos
+          ansible_network_os: c1emon.xikeos.xikeos
           ansible_connection: ansible.netcommon.network_cli
 ```
 
@@ -127,7 +127,7 @@ ansible xike_switches -m ping -i inventory.yml -vvv
 #### 4. Check platform plugin selection
 Ensure:
 - `ansible.netcommon` is installed.
-- `ansible_network_os` is exactly `xike.xikeos.xikeos`.
+- `ansible_network_os` is exactly `c1emon.xikeos.xikeos`.
 - The device responds to IOS-like commands and supports the prompt/error variants documented as open validation items.
 
 #### 5. Debug Mode
@@ -146,7 +146,7 @@ ANSIBLE_DEBUG=1 ansible-playbook playbook.yml -i inventory.yml
 | `Connection refused` | SSH service not running | Check switch SSH config |
 | `Authentication failed` | Wrong credentials | Verify username/password |
 | `Timeout` | Network issue | Check firewall, increase timeout |
-| `Could not find terminal/cliconf plugin` | Wrong `ansible_network_os` or missing collection | Use `xike.xikeos.xikeos` and install this collection |
+| `Could not find terminal/cliconf plugin` | Wrong `ansible_network_os` or missing collection | Use `c1emon.xikeos.xikeos` and install this collection |
 | `Command timeout` | Long-running commands | Increase `ansible_timeout` |
 
 ---
@@ -231,7 +231,7 @@ Use the `xikeos_config` module to push raw commands, or compare its output with 
 ```yaml
 # Raw command approach
 - name: Push raw config
-  xike.xikeos.xikeos_config:
+  c1emon.xikeos.xikeos_config:
     lines:
       - vlan 100
       - name DATA
@@ -244,14 +244,14 @@ Use the `xikeos_config` module to push raw commands, or compare its output with 
 ```yaml
 # Declarative approach
 - name: Configure VLAN
-  xike.xikeos.xikeos_vlans:
+  c1emon.xikeos.xikeos_vlans:
     config:
       - vlan_id: 100
         name: DATA
     state: merged
 
 - name: Configure interface
-  xike.xikeos.xikeos_l2_interfaces:
+  c1emon.xikeos.xikeos_l2_interfaces:
     config:
       - name: ethernet 0/0/1
         mode: access
@@ -290,7 +290,7 @@ Most resource modules do not automatically save configuration. Use one of these 
 #### Method 1: Use save parameter in xikeos_config
 ```yaml
 - name: Apply and save config
-  xike.xikeos.xikeos_config:
+  c1emon.xikeos.xikeos_config:
     lines:
       - vlan 100
       - name DATA
@@ -300,14 +300,14 @@ Most resource modules do not automatically save configuration. Use one of these 
 #### Method 2: Save separately after resource modules
 ```yaml
 - name: Configure VLANs
-  xike.xikeos.xikeos_vlans:
+  c1emon.xikeos.xikeos_vlans:
     config:
       - vlan_id: 100
         name: DATA
     state: merged
 
 - name: Save configuration
-  xike.xikeos.xikeos_config:
+  c1emon.xikeos.xikeos_config:
     lines:
       - write memory
 ```
@@ -315,7 +315,7 @@ Most resource modules do not automatically save configuration. Use one of these 
 #### Method 3: Use xikeos_command
 ```yaml
 - name: Save configuration
-  xike.xikeos.xikeos_command:
+  c1emon.xikeos.xikeos_command:
     commands:
       - write memory
 ```
@@ -348,7 +348,7 @@ Use comma-separated values or ranges:
 ```yaml
 # VLAN range syntax
 - name: Configure trunk with VLAN range
-  xike.xikeos.xikeos_l2_interfaces:
+  c1emon.xikeos.xikeos_l2_interfaces:
     config:
       - name: ethernet 0/0/24
         mode: trunk
@@ -357,7 +357,7 @@ Use comma-separated values or ranges:
 
 # Or use "all" for all VLANs
 - name: Allow all VLANs on trunk
-  xike.xikeos.xikeos_l2_interfaces:
+  c1emon.xikeos.xikeos_l2_interfaces:
     config:
       - name: ethernet 0/0/24
         mode: trunk
@@ -401,7 +401,7 @@ all:
 
 ### How to use with AWX/Tower?
 
-The `xike.xikeos` collection works with AWX/Tower:
+The `c1emon.xikeos` collection works with AWX/Tower:
 
 1. **Install Collection**: Add to AWX/Tower collections path
 2. **Configure Inventory**: Set network OS and connection variables
@@ -410,7 +410,7 @@ The `xike.xikeos` collection works with AWX/Tower:
 
 **AWX/Tower Variables**:
 ```yaml
-ansible_network_os: xike.xikeos.xikeos
+ansible_network_os: c1emon.xikeos.xikeos
 ansible_connection: ansible.netcommon.network_cli
 ```
 
@@ -450,7 +450,7 @@ uv run pytest -q tests/unit
 1. **Use async for slow operations**:
 ```yaml
 - name: Configure VLANs
-  xike.xikeos.xikeos_vlans:
+  c1emon.xikeos.xikeos_vlans:
     config:
       - vlan_id: 100
         name: DATA
@@ -489,12 +489,12 @@ For managing many switches:
 ```yaml
 # roles/switch_config/tasks/main.yml
 - name: Configure VLANs
-  xike.xikeos.xikeos_vlans:
+  c1emon.xikeos.xikeos_vlans:
     config: "{{ switch_vlans }}"
     state: merged
 
 - name: Configure interfaces
-  xike.xikeos.xikeos_l2_interfaces:
+  c1emon.xikeos.xikeos_l2_interfaces:
     config: "{{ switch_interfaces }}"
     state: merged
 ```

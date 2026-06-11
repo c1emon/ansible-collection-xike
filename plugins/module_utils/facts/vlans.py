@@ -8,10 +8,10 @@ __metaclass__ = type
 
 from typing import Any, Sequence
 
-from ansible_collections.xike.xikeos.plugins.module_utils.facts.textfsm_parser import (
+from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.textfsm_parser import (
     parse_textfsm_template,
 )
-from ansible_collections.xike.xikeos.plugins.module_utils.xikeos import (
+from ansible_collections.c1emon.xikeos.plugins.module_utils.xikeos import (
     COMMAND_MAP,
 )
 

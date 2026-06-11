@@ -8,7 +8,7 @@ all:
           ansible_user: admin
           ansible_password: "{{ lookup('env', 'XIKEOS_PASSWORD') }}"
           ansible_connection: ansible.netcommon.network_cli
-          ansible_network_os: xike.xikeos.xikeos
+          ansible_network_os: c1emon.xikeos.xikeos
           ansible_become: true
           ansible_become_method: enable
           ansible_become_password: >-

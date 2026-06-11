@@ -105,12 +105,12 @@ options:
     type: str
     choices: ['merged', 'replaced', 'deleted']
     default: merged
-author: Andy
+author: clemon
 """
 
 EXAMPLES = """
 - name: Create standard IP ACL
-  xike.xikeos.xikeos_acls:
+  c1emon.xikeos.xikeos_acls:
     config:
       - acl_id: 100
         acl_type: standard
@@ -125,7 +125,7 @@ EXAMPLES = """
     state: merged
 
 - name: Create MAC ACL
-  xike.xikeos.xikeos_acls:
+  c1emon.xikeos.xikeos_acls:
     config:
       - acl_id: 1001
         acl_type: mac
@@ -142,7 +142,7 @@ EXAMPLES = """
     state: merged
 
 - name: Create mixed/extended ACL
-  xike.xikeos.xikeos_acls:
+  c1emon.xikeos.xikeos_acls:
     config:
       - acl_id: 2001
         acl_type: mixed
@@ -161,7 +161,7 @@ EXAMPLES = """
     state: merged
 
 - name: Replace ACL configuration
-  xike.xikeos.xikeos_acls:
+  c1emon.xikeos.xikeos_acls:
     config:
       - acl_id: 100
         acl_type: standard
@@ -172,7 +172,7 @@ EXAMPLES = """
     state: replaced
 
 - name: Delete specific ACL
-  xike.xikeos.xikeos_acls:
+  c1emon.xikeos.xikeos_acls:
     config:
       - acl_id: 100
         acl_type: standard
@@ -210,7 +210,7 @@ commands:
 """
 
 from ansible.module_utils.basic import AnsibleModule
-from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config
 from typing import Any
 
 AclRule = dict[str, Any]
@@ -218,7 +218,7 @@ AclConfig = dict[str, Any]
 RuleKey = tuple[Any, Any, Any, Any]
 
 try:
-    from ansible_collections.xike.xikeos.plugins.module_utils.facts.acls import (
+    from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.acls import (
         AclsFacts,
     )
     HAS_FACTS = True

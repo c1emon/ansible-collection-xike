@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, Callable
 if TYPE_CHECKING:
     from ansible.module_utils.basic import AnsibleModule
 
-from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config
 
 
 DEFAULT_MUTATING_STATES: tuple[str, ...] = ("merged", "replaced", "overridden", "deleted")

@@ -95,12 +95,12 @@ options:
     type: str
     choices: ['merged', 'replaced', 'deleted', 'rendered']
     default: merged
-author: Andy
+author: clemon
 """
 
 EXAMPLES = """
 - name: Set QinQ mode to customer with TPIDs
-  xike.xikeos.xikeos_qinq:
+  c1emon.xikeos.xikeos_qinq:
     config:
       mode: customer
       inner_tpid: "0x8100"
@@ -108,7 +108,7 @@ EXAMPLES = """
     state: merged
 
 - name: Configure VLAN insert rules
-  xike.xikeos.xikeos_qinq:
+  c1emon.xikeos.xikeos_qinq:
     config:
       vlan_inserts:
         - start_vlan: 100
@@ -121,7 +121,7 @@ EXAMPLES = """
     state: merged
 
 - name: Configure VLAN pass-through rules
-  xike.xikeos.xikeos_qinq:
+  c1emon.xikeos.xikeos_qinq:
     config:
       vlan_pass_throughs:
         - start_vlan: 10
@@ -129,7 +129,7 @@ EXAMPLES = """
     state: merged
 
 - name: Configure VLAN swap rules
-  xike.xikeos.xikeos_qinq:
+  c1emon.xikeos.xikeos_qinq:
     config:
       vlan_swaps:
         - start_vlan: 100
@@ -139,7 +139,7 @@ EXAMPLES = """
     state: merged
 
 - name: Delete QinQ configuration
-  xike.xikeos.xikeos_qinq:
+  c1emon.xikeos.xikeos_qinq:
     config: {}
     state: deleted
 """
@@ -157,7 +157,7 @@ commands:
 """
 
 from ansible.module_utils.basic import AnsibleModule
-from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.lifecycle import exit_rendered_or_fail
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import exit_rendered_or_fail
 
 
 def get_commands(config: Mapping[str, Any], state: str) -> list[str]:

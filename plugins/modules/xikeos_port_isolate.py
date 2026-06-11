@@ -42,12 +42,12 @@ options:
     type: str
     choices: ['present', 'absent', 'rendered']
     default: present
-author: Andy
+author: clemon
 """
 
 EXAMPLES = """
 - name: Create a port isolation group with members
-  xike.xikeos.xikeos_port_isolate:
+  c1emon.xikeos.xikeos_port_isolate:
     config:
       group_id: 1
       members:
@@ -57,7 +57,7 @@ EXAMPLES = """
     state: present
 
 - name: Add all ports to an isolation group
-  xike.xikeos.xikeos_port_isolate:
+  c1emon.xikeos.xikeos_port_isolate:
     config:
       group_id: 2
       members:
@@ -65,7 +65,7 @@ EXAMPLES = """
     state: present
 
 - name: Remove specific members from an isolation group
-  xike.xikeos.xikeos_port_isolate:
+  c1emon.xikeos.xikeos_port_isolate:
     config:
       group_id: 1
       members:
@@ -73,7 +73,7 @@ EXAMPLES = """
     state: absent
 
 - name: Delete a port isolation group
-  xike.xikeos.xikeos_port_isolate:
+  c1emon.xikeos.xikeos_port_isolate:
     config:
       group_id: 1
     state: absent
@@ -91,7 +91,7 @@ commands:
 """
 
 from ansible.module_utils.basic import AnsibleModule
-from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.lifecycle import exit_rendered_or_fail
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import exit_rendered_or_fail
 
 
 def get_commands(config: Mapping[str, Any], state: str) -> list[str]:

@@ -49,12 +49,12 @@ options:
     type: str
     default: merged
     choices: ['merged', 'replaced']
-author: Andy
+author: clemon
 """
 
 EXAMPLES = """
 - name: Configure access port
-  xike.xikeos.xikeos_l2_interfaces:
+  c1emon.xikeos.xikeos_l2_interfaces:
     config:
       - name: ethernet 0/0/1
         mode: access
@@ -62,7 +62,7 @@ EXAMPLES = """
     state: merged
 
 - name: Configure trunk port
-  xike.xikeos.xikeos_l2_interfaces:
+  c1emon.xikeos.xikeos_l2_interfaces:
     config:
       - name: ethernet 0/0/2
         mode: trunk
@@ -70,7 +70,7 @@ EXAMPLES = """
     state: merged
 
 - name: Configure hybrid port (Xike unique feature)
-  xike.xikeos.xikeos_l2_interfaces:
+  c1emon.xikeos.xikeos_l2_interfaces:
     config:
       - name: ethernet 0/0/3
         mode: hybrid
@@ -80,7 +80,7 @@ EXAMPLES = """
     state: merged
 
 - name: Replace all L2 interface configs
-  xike.xikeos.xikeos_l2_interfaces:
+  c1emon.xikeos.xikeos_l2_interfaces:
     config:
       - name: ethernet 0/0/1
         mode: trunk
@@ -113,8 +113,8 @@ commands:
 """
 
 from ansible.module_utils.basic import AnsibleModule
-from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config
-from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.lifecycle import run_resource_module_lifecycle
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import run_resource_module_lifecycle
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -124,7 +124,7 @@ L2InterfaceConfig = dict[str, Any]
 L2InterfaceState = dict[str, L2InterfaceConfig]
 
 try:
-    from ansible_collections.xike.xikeos.plugins.module_utils.facts.l2_interfaces import L2InterfacesFacts
+    from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.l2_interfaces import L2InterfacesFacts
     HAS_FACTS = True
 except ImportError:
     HAS_FACTS = False

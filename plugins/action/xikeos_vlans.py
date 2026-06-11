@@ -44,7 +44,7 @@ class ActionModule(NormalActionModule):
         if not os.path.isfile(template_path):
             raise AnsibleActionFail(
                 "Required parser template '{0}' was not found on the controller at '{1}'. "
-                "Reinstall or rebuild the xike.xikeos collection and verify the file exists under "
+                "Reinstall or rebuild the c1emon.xikeos collection and verify the file exists under "
                 "plugins/module_utils/facts/textfsm_templates/.".format(template_name, template_path)
             )
 

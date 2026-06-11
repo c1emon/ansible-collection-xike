@@ -58,12 +58,12 @@ options:
     type: str
     choices: ['present', 'absent', 'rendered']
     default: present
-author: Andy
+author: clemon
 """
 
 EXAMPLES = """
 - name: Configure EAPS domain 1 with standard mode
-  xike.xikeos.xikeos_eaps:
+  c1emon.xikeos.xikeos_eaps:
     domain_id: 1
     control_vlan: 100
     work_mode: standard
@@ -77,7 +77,7 @@ EXAMPLES = """
     state: present
 
 - name: Configure EAPS domain 2 with RRPP mode
-  xike.xikeos.xikeos_eaps:
+  c1emon.xikeos.xikeos_eaps:
     domain_id: 2
     control_vlan: 200
     work_mode: rrpp
@@ -88,7 +88,7 @@ EXAMPLES = """
     state: present
 
 - name: Remove EAPS domain 1
-  xike.xikeos.xikeos_eaps:
+  c1emon.xikeos.xikeos_eaps:
     domain_id: 1
     state: absent
 """
@@ -110,7 +110,7 @@ commands:
 """
 
 from ansible.module_utils.basic import AnsibleModule
-from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.lifecycle import exit_rendered_or_fail
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import exit_rendered_or_fail
 
 
 def get_commands(config: Mapping[str, Any], state: str) -> list[str]:

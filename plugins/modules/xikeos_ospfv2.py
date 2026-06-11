@@ -86,12 +86,12 @@ options:
     type: str
     default: merged
     choices: ['merged', 'replaced', 'rendered']
-author: Andy
+author: clemon
 """
 
 EXAMPLES = """
 - name: Configure OSPFv2 with network statements
-  xike.xikeos.xikeos_ospfv2:
+  c1emon.xikeos.xikeos_ospfv2:
     config:
       process_id: 1
       router_id: 1.1.1.1
@@ -105,7 +105,7 @@ EXAMPLES = """
     state: merged
 
 - name: Configure OSPFv2 with redistribution
-  xike.xikeos.xikeos_ospfv2:
+  c1emon.xikeos.xikeos_ospfv2:
     config:
       process_id: 1
       router_id: 1.1.1.1
@@ -121,7 +121,7 @@ EXAMPLES = """
     state: merged
 
 - name: Configure OSPFv2 with default-information originate
-  xike.xikeos.xikeos_ospfv2:
+  c1emon.xikeos.xikeos_ospfv2:
     config:
       process_id: 1
       router_id: 1.1.1.1
@@ -132,7 +132,7 @@ EXAMPLES = """
     state: merged
 
 - name: Configure OSPFv2 with passive interfaces
-  xike.xikeos.xikeos_ospfv2:
+  c1emon.xikeos.xikeos_ospfv2:
     config:
       process_id: 1
       router_id: 1.1.1.1
@@ -146,7 +146,7 @@ EXAMPLES = """
     state: merged
 
 - name: Replace entire OSPFv2 configuration
-  xike.xikeos.xikeos_ospfv2:
+  c1emon.xikeos.xikeos_ospfv2:
     config:
       process_id: 1
       router_id: 2.2.2.2
@@ -195,10 +195,10 @@ commands:
 """
 
 from ansible.module_utils.basic import AnsibleModule
-from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.lifecycle import exit_rendered_or_fail
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import exit_rendered_or_fail
 
 try:
-    from ansible_collections.xike.xikeos.plugins.module_utils.facts.ospfv2 import (
+    from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.ospfv2 import (
         Ospfv2Facts,
     )
     HAS_FACTS = True

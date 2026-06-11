@@ -5,7 +5,7 @@
 
   tasks:
     - name: Read operational command output
-      xike.xikeos.xikeos_command:
+      c1emon.xikeos.xikeos_command:
         commands:
           - show version
           - show vlan

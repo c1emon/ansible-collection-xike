@@ -1,6 +1,6 @@
-# xike.xikeos Developer Guide
+# c1emon.xikeos Developer Guide
 
-Guide for developers contributing to the `xike.xikeos` Ansible Collection.
+Guide for developers contributing to the `c1emon.xikeos` Ansible Collection.
 
 ## Table of Contents
 
@@ -16,7 +16,7 @@ Guide for developers contributing to the `xike.xikeos` Ansible Collection.
 ## Project Structure
 
 ```
-xike.xikeos/
+c1emon.xikeos/
 ├── galaxy.yml                    # Collection metadata
 ├── README.md                     # Main documentation
 ├── pyproject.toml                # Python project metadata and dependencies
@@ -88,7 +88,7 @@ xike.xikeos/
 
 #### Platform Plugins (`plugins/terminal/xikeos.py`, `plugins/cliconf/xikeos.py`)
 - Inventory must use `ansible_connection: ansible.netcommon.network_cli`.
-- `ansible_network_os: xike.xikeos.xikeos` selects this collection's terminal and cliconf plugins.
+- `ansible_network_os: c1emon.xikeos.xikeos` selects this collection's terminal and cliconf plugins.
 - `terminal/xikeos.py` owns prompt matching, paging disablement, privilege-mode handling, and command error detection.
 - `cliconf/xikeos.py` owns show command execution, running-config retrieval, configuration edits, device info, and capabilities.
 
@@ -188,12 +188,12 @@ options:
     type: str
     choices: ['present', 'absent']
     default: present
-author: Andy
+author: clemon
 """
 
 EXAMPLES = """
 - name: Configure <feature>
-  xike.xikeos.xikeos_<feature>:
+  c1emon.xikeos.xikeos_<feature>:
     config:
       parameter_name: value
     state: present
@@ -341,7 +341,7 @@ Create unit tests in `tests/unit/test_xikeos_<feature>.py`:
 """Unit tests for xikeos_<feature> module."""
 
 import pytest
-from ansible_collections.xike.xikeos.plugins.modules.xikeos_<feature> import (
+from ansible_collections.c1emon.xikeos.plugins.modules.xikeos_<feature> import (
     get_commands,
 )
 
@@ -516,7 +516,7 @@ Update the module to use the facts parser:
 
 ```python
 try:
-    from ansible_collections.xike.xikeos.plugins.module_utils.facts.<feature> import (
+    from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.<feature> import (
         <Feature>Facts,
     )
     HAS_FACTS = True
@@ -543,7 +543,7 @@ def main():
 """Unit tests for <feature> facts parser."""
 
 import pytest
-from ansible_collections.xike.xikeos.plugins.module_utils.facts.<feature> import (
+from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.<feature> import (
     parse_<feature>_output,
 )
 
@@ -625,7 +625,7 @@ all:
       ansible_host: 192.168.1.100
       ansible_user: admin
       ansible_password: secret
-      ansible_network_os: xike.xikeos.xikeos
+      ansible_network_os: c1emon.xikeos.xikeos
       ansible_connection: ansible.netcommon.network_cli
 EOF
 ```
@@ -638,7 +638,7 @@ EOF
   gather_facts: no
   tasks:
     - name: Test task
-      xike.xikeos.xikeos_<feature>:
+      c1emon.xikeos.xikeos_<feature>:
         config:
           # ... test configuration
         state: present
@@ -744,12 +744,12 @@ options:
     type: str
     choices: ['present', 'absent']
     default: present
-author: Andy
+author: clemon
 """
 
 EXAMPLES = """
 - name: Example
-  xike.xikeos.xikeos_<feature>:
+  c1emon.xikeos.xikeos_<feature>:
     config:
       param: value
     state: present
@@ -852,7 +852,7 @@ options:
     type: str
     choices: ['present', 'absent']
     default: present
-author: Andy
+author: clemon
 """
 ```
 

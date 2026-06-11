@@ -1,8 +1,8 @@
-# xike.xikeos Architecture
+# c1emon.xikeos Architecture
 
 ## Overview
 
-The `xike.xikeos` Ansible Collection follows the standard Ansible network module architecture: playbooks use `ansible.netcommon.network_cli`, `ansible_network_os: xike.xikeos.xikeos`, and this collection's terminal and cliconf plugins. Netmiko Raisecom support is an optional CLI-behavior reference, not the primary backend.
+The `c1emon.xikeos` Ansible Collection follows the standard Ansible network module architecture: playbooks use `ansible.netcommon.network_cli`, `ansible_network_os: c1emon.xikeos.xikeos`, and this collection's terminal and cliconf plugins. Netmiko Raisecom support is an optional CLI-behavior reference, not the primary backend.
 
 ## Architecture Diagram
 
@@ -11,7 +11,7 @@ The `xike.xikeos` Ansible Collection follows the standard Ansible network module
 │                            Your Playbook                                     │
 │                                                                              │
 │   tasks:                                                                     │
-│     - xike.xikeos.xikeos_vlans:                                             │
+│     - c1emon.xikeos.xikeos_vlans:                                             │
 │         config:                                                              │
 │           - vlan_id: 100                                                     │
 │             name: DATA                                                       │
@@ -20,7 +20,7 @@ The `xike.xikeos` Ansible Collection follows the standard Ansible network module
                                 │
                                 ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                     xike.xikeos Resource Modules                             │
+│                     c1emon.xikeos Resource Modules                             │
 │                                                                              │
 │  ┌─────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────────┐    │
 │  │ Interfaces  │ │ VLANs        │ │ OSPFv2       │ │ ACLs             │    │
@@ -120,7 +120,7 @@ The supported inventory path is:
 
 ```yaml
 ansible_connection: ansible.netcommon.network_cli
-ansible_network_os: xike.xikeos.xikeos
+ansible_network_os: c1emon.xikeos.xikeos
 ```
 
 - **Transport**: `ansible.netcommon.network_cli` over SSH
@@ -392,7 +392,7 @@ This allows modules to use logical names while the actual CLI commands are defin
 ## Directory Structure
 
 ```
-xike.xikeos/
+c1emon.xikeos/
 ├── galaxy.yml                    # Collection metadata
 ├── README.md                     # Documentation
 ├── plugins/

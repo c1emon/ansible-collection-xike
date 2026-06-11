@@ -74,12 +74,12 @@ options:
     type: str
     choices: ['present', 'absent', 'rendered']
     default: present
-author: Andy
+author: clemon
 """
 
 EXAMPLES = """
 - name: Configure ERPS instance 1 with control VLAN 100
-  xike.xikeos.xikeos_erps:
+  c1emon.xikeos.xikeos_erps:
     instance_id: 1
     control_vlan: 100
     port0: "ethernet 1 owner"
@@ -93,7 +93,7 @@ EXAMPLES = """
     state: present
 
 - name: Configure ERPS instance 2 with LAG ports
-  xike.xikeos.xikeos_erps:
+  c1emon.xikeos.xikeos_erps:
     instance_id: 2
     control_vlan: 200
     port0: "eth-trunk 1 owner"
@@ -104,7 +104,7 @@ EXAMPLES = """
     state: present
 
 - name: Remove ERPS instance 1
-  xike.xikeos.xikeos_erps:
+  c1emon.xikeos.xikeos_erps:
     instance_id: 1
     state: absent
 """
@@ -126,7 +126,7 @@ commands:
 """
 
 from ansible.module_utils.basic import AnsibleModule
-from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.lifecycle import exit_rendered_or_fail
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import exit_rendered_or_fail
 
 
 def vlan_id_to_ranges(vlan_ids: Sequence[int]) -> str:

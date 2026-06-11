@@ -61,7 +61,7 @@ def _load_ttp_template(template_name: str, templates: dict[str, str] | None = No
     if not os.path.isfile(template_path):
         raise FileNotFoundError(
             "Bundled TTP template '{0}' was not injected and was not found at '{1}'. "
-            "Run through the module action plugin or reinstall the xike.xikeos collection and "
+            "Run through the module action plugin or reinstall the c1emon.xikeos collection and "
             "verify collection packaging includes plugins/module_utils/facts/ttp_templates/*.ttp.".format(
                 template_name,
                 template_path,

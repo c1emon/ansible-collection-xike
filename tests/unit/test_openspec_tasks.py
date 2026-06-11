@@ -11,10 +11,10 @@ from unittest.mock import Mock, call, patch
 
 import pytest
 
-from ansible_collections.xike.xikeos.plugins.cliconf import xikeos as cliconf_module
-from ansible_collections.xike.xikeos.plugins.cliconf.xikeos import Cliconf
-from ansible_collections.xike.xikeos.plugins.action import xikeos_vlans as action_vlans_module
-from ansible_collections.xike.xikeos.plugins.modules import (
+from ansible_collections.c1emon.xikeos.plugins.cliconf import xikeos as cliconf_module
+from ansible_collections.c1emon.xikeos.plugins.cliconf.xikeos import Cliconf
+from ansible_collections.c1emon.xikeos.plugins.action import xikeos_vlans as action_vlans_module
+from ansible_collections.c1emon.xikeos.plugins.modules import (
     xikeos_command as command_module,
     xikeos_acls as acls_module,
     xikeos_config as config_module,
@@ -33,8 +33,8 @@ from ansible_collections.xike.xikeos.plugins.modules import (
     xikeos_stp as stp_module,
     xikeos_vlans as vlans_module,
 )
-from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos import xikeos as network_utils
-from ansible_collections.xike.xikeos.plugins.terminal.xikeos import TerminalModule
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos import xikeos as network_utils
+from ansible_collections.c1emon.xikeos.plugins.terminal.xikeos import TerminalModule
 
 from .lifecycle_helpers import ExitJson, fake_module
 

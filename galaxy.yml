@@ -1,18 +1,18 @@
-namespace: xike
+namespace: c1emon
 name: xikeos
 version: 0.1.0
 readme: README.md
 description: Ansible Collection for Xike (兮克) switches - Cisco IOS-like CLI
 authors:
-  - Andy
+  - clemon
 license:
   - MIT
 dependencies:
   ansible.netcommon: ">=5.0.0"
-repository: https://github.com/andy/xike-xikeos
-documentation: https://github.com/andy/xike-xikeos
-homepage: https://github.com/andy/xike-xikeos
-issues: https://github.com/andy/xike-xikeos/issues
+repository: https://github.com/c1emon/ansible-collection-xike
+documentation: https://github.com/c1emon/ansible-collection-xike
+homepage: https://github.com/c1emon/ansible-collection-xike
+issues: https://github.com/c1emon/ansible-collection-xike/issues
 tags:
   - xike
   - network

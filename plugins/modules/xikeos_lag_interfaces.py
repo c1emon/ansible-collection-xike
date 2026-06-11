@@ -42,12 +42,12 @@ options:
     type: str
     default: merged
     choices: ['merged', 'replaced']
-author: Andy
+author: clemon
 """
 
 EXAMPLES = """
 - name: Create static eth-trunk 1 with two members
-  xike.xikeos.xikeos_lag_interfaces:
+  c1emon.xikeos.xikeos_lag_interfaces:
     config:
       - name: eth-trunk 1
         mode: static
@@ -57,7 +57,7 @@ EXAMPLES = """
     state: merged
 
 - name: Create dynamic eth-trunk with LACP active
-  xike.xikeos.xikeos_lag_interfaces:
+  c1emon.xikeos.xikeos_lag_interfaces:
     config:
       - name: eth-trunk 2
         mode: dynamic
@@ -68,7 +68,7 @@ EXAMPLES = """
     state: merged
 
 - name: Replace eth-trunk configuration
-  xike.xikeos.xikeos_lag_interfaces:
+  c1emon.xikeos.xikeos_lag_interfaces:
     config:
       - name: eth-trunk 1
         mode: dynamic
@@ -100,8 +100,8 @@ commands:
 """
 
 from ansible.module_utils.basic import AnsibleModule
-from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config
-from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.lifecycle import run_resource_module_lifecycle
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import run_resource_module_lifecycle
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -111,7 +111,7 @@ LagInterfaceConfig = dict[str, Any]
 LagInterfaceState = dict[str, LagInterfaceConfig]
 
 try:
-    from ansible_collections.xike.xikeos.plugins.module_utils.facts.lag_interfaces import (
+    from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.lag_interfaces import (
         LagInterfacesFacts,
     )
     HAS_FACTS = True

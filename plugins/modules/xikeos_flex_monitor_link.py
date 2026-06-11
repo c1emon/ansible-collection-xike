@@ -107,12 +107,12 @@ options:
     type: str
     choices: ['merged', 'replaced', 'deleted', 'rendered']
     default: merged
-author: Andy
+author: clemon
 """
 
 EXAMPLES = """
 - name: Configure Flex-Link group
-  xike.xikeos.xikeos_flex_monitor_link:
+  c1emon.xikeos.xikeos_flex_monitor_link:
     config:
       flex_links:
         - group_id: 1
@@ -126,7 +126,7 @@ EXAMPLES = """
     state: merged
 
 - name: Configure Monitor-Link group
-  xike.xikeos.xikeos_flex_monitor_link:
+  c1emon.xikeos.xikeos_flex_monitor_link:
     config:
       monitor_links:
         - group_id: 1
@@ -141,7 +141,7 @@ EXAMPLES = """
     state: merged
 
 - name: Configure Flex-Link with eth-trunk ports
-  xike.xikeos.xikeos_flex_monitor_link:
+  c1emon.xikeos.xikeos_flex_monitor_link:
     config:
       flex_links:
         - group_id: 2
@@ -155,7 +155,7 @@ EXAMPLES = """
     state: merged
 
 - name: Delete Flex-Link and Monitor-Link configuration
-  xike.xikeos.xikeos_flex_monitor_link:
+  c1emon.xikeos.xikeos_flex_monitor_link:
     config: {}
     state: deleted
 """
@@ -173,7 +173,7 @@ commands:
 """
 
 from ansible.module_utils.basic import AnsibleModule
-from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.lifecycle import exit_rendered_or_fail
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import exit_rendered_or_fail
 
 
 def _format_port(port_spec: Mapping[str, str] | None) -> str | None:

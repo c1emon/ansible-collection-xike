@@ -65,12 +65,12 @@ options:
     type: str
     choices: ['merged', 'replaced', 'deleted']
     default: merged
-author: Andy
+author: clemon
 """
 
 EXAMPLES = """
 - name: Add IPv4 static routes
-  xike.xikeos.xikeos_static_routes:
+  c1emon.xikeos.xikeos_static_routes:
     config:
       - destination: 192.168.100.0
         mask: 255.255.255.0
@@ -85,7 +85,7 @@ EXAMPLES = """
     state: merged
 
 - name: Add default route
-  xike.xikeos.xikeos_static_routes:
+  c1emon.xikeos.xikeos_static_routes:
     config:
       - destination: 0.0.0.0
         mask: 0.0.0.0
@@ -94,7 +94,7 @@ EXAMPLES = """
     state: merged
 
 - name: Add IPv6 static route
-  xike.xikeos.xikeos_static_routes:
+  c1emon.xikeos.xikeos_static_routes:
     config:
       - destination: 2001:db8::
         mask: 32
@@ -103,7 +103,7 @@ EXAMPLES = """
     state: merged
 
 - name: Replace all static routes
-  xike.xikeos.xikeos_static_routes:
+  c1emon.xikeos.xikeos_static_routes:
     config:
       - destination: 0.0.0.0
         mask: 0.0.0.0
@@ -112,7 +112,7 @@ EXAMPLES = """
     state: replaced
 
 - name: Delete specific static routes
-  xike.xikeos.xikeos_static_routes:
+  c1emon.xikeos.xikeos_static_routes:
     config:
       - destination: 192.168.100.0
         mask: 255.255.255.0
@@ -121,7 +121,7 @@ EXAMPLES = """
     state: deleted
 
 - name: Delete all static routes (empty config)
-  xike.xikeos.xikeos_static_routes:
+  c1emon.xikeos.xikeos_static_routes:
     config: []
     state: deleted
 """
@@ -158,14 +158,14 @@ commands:
 """
 
 from ansible.module_utils.basic import AnsibleModule
-from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config
 from typing import Any
 
 RouteConfig = dict[str, Any]
 RouteKey = tuple[Any, Any, Any]
 
 try:
-    from ansible_collections.xike.xikeos.plugins.module_utils.facts.static_routes import (
+    from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.static_routes import (
         StaticRoutesFacts,
     )
     HAS_FACTS = True

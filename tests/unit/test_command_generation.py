@@ -4,30 +4,30 @@ from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
 # Import command generation functions directly (no device connection needed)
-from ansible_collections.xike.xikeos.plugins.modules.xikeos_vlans import (
+from ansible_collections.c1emon.xikeos.plugins.modules.xikeos_vlans import (
     get_commands as vlan_get_commands,
     vlan_id_range,
 )
-from ansible_collections.xike.xikeos.plugins.modules.xikeos_interfaces import (
+from ansible_collections.c1emon.xikeos.plugins.modules.xikeos_interfaces import (
     build_interface_commands,
 )
-from ansible_collections.xike.xikeos.plugins.modules.xikeos_l2_interfaces import (
+from ansible_collections.c1emon.xikeos.plugins.modules.xikeos_l2_interfaces import (
     build_commands as l2_build_commands,
 )
-from ansible_collections.xike.xikeos.plugins.modules.xikeos_l3_interfaces import (
+from ansible_collections.c1emon.xikeos.plugins.modules.xikeos_l3_interfaces import (
     build_commands as l3_build_commands,
 )
-from ansible_collections.xike.xikeos.plugins.modules.xikeos_lag_interfaces import (
+from ansible_collections.c1emon.xikeos.plugins.modules.xikeos_lag_interfaces import (
     build_trunk_commands,
 )
-from ansible_collections.xike.xikeos.plugins.modules.xikeos_ospfv2 import (
+from ansible_collections.c1emon.xikeos.plugins.modules.xikeos_ospfv2 import (
     build_commands as ospf_build_commands,
     build_delete_commands as ospf_build_delete_commands,
 )
-from ansible_collections.xike.xikeos.plugins.modules.xikeos_mirror import (
+from ansible_collections.c1emon.xikeos.plugins.modules.xikeos_mirror import (
     get_commands as mirror_get_commands,
 )
-from ansible_collections.xike.xikeos.plugins.modules.xikeos_qinq import (
+from ansible_collections.c1emon.xikeos.plugins.modules.xikeos_qinq import (
     get_commands as qinq_get_commands,
 )
 

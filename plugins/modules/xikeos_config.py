@@ -34,12 +34,12 @@ options:
       - Currently unsupported; setting this option to C(true) fails the module.
     type: bool
     default: false
-author: Andy
+author: clemon
 """
 
 EXAMPLES = """
 - name: Push config lines
-  xike.xikeos.xikeos_config:
+  c1emon.xikeos.xikeos_config:
     lines:
       - vlan 100
       - name DATA
@@ -49,7 +49,7 @@ EXAMPLES = """
 """
 
 from ansible.module_utils.basic import AnsibleModule
-from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config, run_commands
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config, run_commands
 
 
 SAVE_COMMAND = 'write memory'

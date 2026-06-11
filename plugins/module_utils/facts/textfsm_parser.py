@@ -42,7 +42,7 @@ def parse_textfsm_template(
     else:
         raise FileNotFoundError(
             "Bundled TextFSM template '{0}' was not injected and was not found at '{1}'. "
-            "Run through the module action plugin or reinstall the xike.xikeos collection and "
+            "Run through the module action plugin or reinstall the c1emon.xikeos collection and "
             "verify collection packaging includes plugins/module_utils/facts/textfsm_templates/*.textfsm.".format(
                 template_name,
                 template_path,

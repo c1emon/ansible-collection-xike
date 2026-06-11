@@ -46,12 +46,12 @@ options:
     type: str
     choices: ['merged', 'replaced', 'deleted', 'gathered']
     default: merged
-author: Andy
+author: clemon
 """
 
 EXAMPLES = """
 - name: Create VLANs on Xike switch
-  xike.xikeos.xikeos_vlans:
+  c1emon.xikeos.xikeos_vlans:
     config:
       - vlan_id: 100
         name: DATA
@@ -62,7 +62,7 @@ EXAMPLES = """
     state: merged
 
 - name: Replace VLAN configuration
-  xike.xikeos.xikeos_vlans:
+  c1emon.xikeos.xikeos_vlans:
     config:
       - vlan_id: 100
         name: SALES
@@ -70,14 +70,14 @@ EXAMPLES = """
     state: replaced
 
 - name: Delete VLANs
-  xike.xikeos.xikeos_vlans:
+  c1emon.xikeos.xikeos_vlans:
     config:
       - vlan_id: 100
       - vlan_id: 200
     state: deleted
 
 - name: Gather VLANs
-  xike.xikeos.xikeos_vlans:
+  c1emon.xikeos.xikeos_vlans:
     state: gathered
 """
 
@@ -100,9 +100,9 @@ gathered:
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.common.text.converters import to_text
-from ansible_collections.xike.xikeos.plugins.module_utils.facts.vlans import parse_vlan
-from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config, run_commands
-from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.lifecycle import run_resource_module_lifecycle
+from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.vlans import parse_vlan
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config, run_commands
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import run_resource_module_lifecycle
 
 
 def vlan_id_range(vlan_ids: list[int]) -> str:
