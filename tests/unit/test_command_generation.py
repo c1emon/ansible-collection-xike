@@ -27,6 +27,9 @@ from ansible_collections.xike.xikeos.plugins.modules.xikeos_ospfv2 import (
 from ansible_collections.xike.xikeos.plugins.modules.xikeos_mirror import (
     get_commands as mirror_get_commands,
 )
+from ansible_collections.xike.xikeos.plugins.modules.xikeos_qinq import (
+    get_commands as qinq_get_commands,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -540,3 +543,33 @@ class TestMirrorCommands:
         }
         cmds = mirror_get_commands(config, "present")
         assert cmds == []
+
+
+# ---------------------------------------------------------------------------
+# QinQ command tests
+# ---------------------------------------------------------------------------
+
+class TestQinqCommands:
+    """Tests for QinQ command generation."""
+
+    def test_optional_rule_lists_accept_none(self):
+        config = {
+            "mode": "customer",
+            "outer_tpid": "0x8100",
+            "vlan_inserts": None,
+            "vlan_pass_throughs": [
+                {
+                    "start_vlan": 100,
+                    "end_vlan": 100,
+                }
+            ],
+            "vlan_swaps": None,
+        }
+
+        cmds = qinq_get_commands(config, "merged")
+
+        assert cmds == [
+            "qinq mode customer",
+            "qinq outer-tpid 0x8100",
+            "vlan pass-through 100 100",
+        ]

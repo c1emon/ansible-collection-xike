@@ -190,7 +190,7 @@ def get_commands(config: Mapping[str, Any], state: str) -> list[str]:
         commands.append("qinq outer-tpid {0}".format(outer_tpid))
 
     # VLAN insert rules
-    vlan_inserts = config.get("vlan_inserts", [])
+    vlan_inserts = config.get("vlan_inserts") or []
     for rule in vlan_inserts:
         start_vlan = rule["start_vlan"]
         end_vlan = rule["end_vlan"]
@@ -202,14 +202,14 @@ def get_commands(config: Mapping[str, Any], state: str) -> list[str]:
         commands.append(cmd)
 
     # VLAN pass-through rules
-    vlan_pass_throughs = config.get("vlan_pass_throughs", [])
+    vlan_pass_throughs = config.get("vlan_pass_throughs") or []
     for rule in vlan_pass_throughs:
         start_vlan = rule["start_vlan"]
         end_vlan = rule["end_vlan"]
         commands.append("vlan pass-through {0} {1}".format(start_vlan, end_vlan))
 
     # VLAN swap rules
-    vlan_swaps = config.get("vlan_swaps", [])
+    vlan_swaps = config.get("vlan_swaps") or []
     for rule in vlan_swaps:
         start_vlan = rule["start_vlan"]
         end_vlan = rule["end_vlan"]

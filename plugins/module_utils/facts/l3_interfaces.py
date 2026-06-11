@@ -35,6 +35,10 @@ class L3InterfacesFacts(object):
         except Exception as exc:
             self.module.fail_json(msg='failed to gather L3 interface facts: {0}'.format(to_text(exc)))
 
+    def get_facts(self) -> dict[str, dict[str, list[dict[str, Any]]]]:
+        """Return gathered facts."""
+        return self.facts
+
     def _parse_interface_list(self, output: str) -> list[str]:
         """Parse interface names from 'show interface vlan-interface' output."""
         interfaces: list[str] = []
