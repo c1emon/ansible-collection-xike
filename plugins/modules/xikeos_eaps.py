@@ -58,7 +58,7 @@ options:
     type: str
     choices: ['present', 'absent', 'rendered']
     default: present
-author: Andy
+author: clemon
 """
 
 EXAMPLES = """

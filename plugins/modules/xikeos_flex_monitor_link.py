@@ -107,7 +107,7 @@ options:
     type: str
     choices: ['merged', 'replaced', 'deleted', 'rendered']
     default: merged
-author: Andy
+author: clemon
 """
 
 EXAMPLES = """

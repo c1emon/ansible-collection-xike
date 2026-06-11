@@ -46,7 +46,7 @@ options:
     type: str
     choices: ['merged', 'replaced']
     default: merged
-author: Andy
+author: clemon
 """
 
 EXAMPLES = """

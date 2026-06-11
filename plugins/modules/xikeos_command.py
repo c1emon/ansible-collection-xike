@@ -21,7 +21,7 @@ options:
     type: list
     elements: str
     required: true
-author: Andy
+author: clemon
 """
 
 EXAMPLES = """

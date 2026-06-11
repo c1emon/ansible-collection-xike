@@ -34,7 +34,7 @@ options:
       - Currently unsupported; setting this option to C(true) fails the module.
     type: bool
     default: false
-author: Andy
+author: clemon
 """
 
 EXAMPLES = """

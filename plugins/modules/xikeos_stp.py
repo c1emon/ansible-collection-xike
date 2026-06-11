@@ -99,7 +99,7 @@ options:
     type: str
     choices: ['merged', 'replaced', 'rendered']
     default: merged
-author: Andy
+author: clemon
 """
 
 EXAMPLES = """

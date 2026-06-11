@@ -188,7 +188,7 @@ options:
     type: str
     choices: ['present', 'absent']
     default: present
-author: Andy
+author: clemon
 """
 
 EXAMPLES = """
@@ -744,7 +744,7 @@ options:
     type: str
     choices: ['present', 'absent']
     default: present
-author: Andy
+author: clemon
 """
 
 EXAMPLES = """
@@ -852,7 +852,7 @@ options:
     type: str
     choices: ['present', 'absent']
     default: present
-author: Andy
+author: clemon
 """
 ```
 

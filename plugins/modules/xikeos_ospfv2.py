@@ -86,7 +86,7 @@ options:
     type: str
     default: merged
     choices: ['merged', 'replaced', 'rendered']
-author: Andy
+author: clemon
 """
 
 EXAMPLES = """
