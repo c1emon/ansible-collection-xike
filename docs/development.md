@@ -7,6 +7,7 @@ Guide for developers contributing to the `xike.xikeos` Ansible Collection.
 - [Project Structure](#project-structure)
 - [Adding a New Module](#adding-a-new-module)
 - [Adding a New Facts Parser](#adding-a-new-facts-parser)
+- [Resource Module Lifecycle Contract](#resource-module-lifecycle-contract)
 - [Testing Changes](#testing-changes)
 - [Code Style Conventions](#code-style-conventions)
 
@@ -99,6 +100,37 @@ xike.xikeos/
 - Each module implements a specific feature
 - Modules gather current state where needed, generate minimal CLI commands, and execute through cliconf helpers.
 - Support check mode and consistent `before`, `after`, `commands`, and `changed` results for reference resource modules.
+
+---
+
+## Resource Module Lifecycle Contract
+
+Declarative resource modules that support mutating states (`merged`, `replaced`, `deleted`, `present`, or `absent`) must follow the standard lifecycle:
+
+1. Validate module input.
+2. Gather `before` state through network `run_commands()` or a facts provider that uses that helper.
+3. Normalize desired and current state before diffing.
+4. Compute minimal `commands` before honoring check mode.
+5. In check mode, return `changed`, `commands`, `before`, and `after` without calling `load_config()`.
+6. Outside check mode, apply configuration only through `load_config()`.
+7. Report `after` from post-change facts or a clearly documented simulated transition.
+
+Resource modules must not use `module.run_command()` for device configuration. Facts providers must fail explicitly when required show/config output cannot be gathered or parsed; they must not silently return empty current state.
+
+Current lifecycle classification:
+
+| Module | Lifecycle status | Notes |
+|--------|------------------|-------|
+| `xikeos_vlans` | lifecycle-complete | Reference implementation; supports `gathered` and mutating VLAN states. |
+| `xikeos_static_routes` | lifecycle-complete | Uses facts, computes check-mode diffs, applies with `load_config()`. |
+| `xikeos_acls` | lifecycle-complete | Uses facts, computes check-mode diffs, applies with `load_config()`. |
+| `xikeos_interfaces` | lifecycle-complete | Uses interface facts and shared lifecycle helper. |
+| `xikeos_l2_interfaces` | lifecycle-complete | Uses running-config facts and shared lifecycle helper. |
+| `xikeos_l3_interfaces` | lifecycle-complete | Uses running-config facts and shared lifecycle helper. |
+| `xikeos_lag_interfaces` | lifecycle-complete | Uses running-config facts and shared lifecycle helper. |
+| `xikeos_stp`, `xikeos_erps`, `xikeos_eaps`, `xikeos_qinq`, `xikeos_mirror`, `xikeos_port_isolate`, `xikeos_flex_monitor_link`, `xikeos_ospfv2` | rendered-only | `state=rendered` returns commands without changing the device; mutating states fail fast until full lifecycle support is implemented. |
+
+Use `plugins/module_utils/network/xikeos/lifecycle.py` for shared lifecycle mechanics when adding or migrating modules.
 
 #### Module Utils (`plugins/module_utils/`)
 - **xikeos.py**: COMMAND_MAP and constants

@@ -1,0 +1,25 @@
+---
+- name: Live read-only command smoke test
+  hosts: xike_switches
+  gather_facts: false
+
+  tasks:
+    - name: Read operational command output
+      xike.xikeos.xikeos_command:
+        commands:
+          - show version
+          - show vlan
+          - show interface brief
+          - show ip route
+      register: xikeos_read_commands
+
+    - name: Assert command task did not report configuration changes
+      ansible.builtin.assert:
+        that:
+          - not xikeos_read_commands.changed
+          - xikeos_read_commands.stdout is defined
+          - xikeos_read_commands.stdout | length == 4
+
+    - name: Display command output lines
+      ansible.builtin.debug:
+        var: xikeos_read_commands.stdout_lines

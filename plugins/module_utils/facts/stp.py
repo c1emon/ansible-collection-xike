@@ -6,6 +6,8 @@
 from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
+from typing import Any
+
 import re
 
 from ansible_collections.xike.xikeos.plugins.module_utils.xikeos import (
@@ -13,7 +15,7 @@ from ansible_collections.xike.xikeos.plugins.module_utils.xikeos import (
 )
 
 
-def parse_stp_brief(output):
+def parse_stp_brief(output: str | None) -> dict[str, Any]:
     """
     Parse 'show stp interface brief' output and return STP facts.
 
@@ -29,7 +31,10 @@ def parse_stp_brief(output):
     BPDU Guard: Disabled
     BPDU Filter: Disabled
     """
-    facts = {}
+    facts: dict[str, Any] = {}
+
+    if output is None or output == "":
+        return facts
 
     lines = output.strip().split("\n")
 
@@ -89,7 +94,7 @@ def parse_stp_brief(output):
     return facts
 
 
-def parse_mstp_brief(output):
+def parse_mstp_brief(output: str | None) -> dict[str, Any]:
     """
     Parse 'show mstp instance brief' output and return MSTP facts.
 
@@ -102,8 +107,11 @@ def parse_mstp_brief(output):
     1         10,20,30           8192
     2         100,200            16384
     """
-    facts = {}
-    instances = []
+    facts: dict[str, Any] = {}
+    instances: list[dict[str, Any]] = []
+
+    if output is None or output == "":
+        return facts
 
     lines = output.strip().split("\n")
 
@@ -153,7 +161,7 @@ def parse_mstp_brief(output):
     return facts
 
 
-def parse_vlan_ranges(vlan_str):
+def parse_vlan_ranges(vlan_str: str) -> list[int]:
     """
     Parse VLAN range string into a list of VLAN IDs.
 
@@ -188,7 +196,7 @@ def parse_vlan_ranges(vlan_str):
     return sorted(set(vlans))
 
 
-def parse_pvst_brief(output):
+def parse_pvst_brief(output: str | None) -> dict[str, Any]:
     """
     Parse 'show pvst instance brief' output and return PVST facts.
 
@@ -198,8 +206,11 @@ def parse_pvst_brief(output):
     10        10      32768
     20        20      32768
     """
-    facts = {}
-    instances = []
+    facts: dict[str, Any] = {}
+    instances: list[dict[str, Any]] = []
+
+    if output is None or output == "":
+        return facts
 
     lines = output.strip().split("\n")
 
@@ -233,7 +244,7 @@ def parse_pvst_brief(output):
     return facts
 
 
-def get_facts(facts_module, connection):
+def get_facts(facts_module: Any, connection: Any) -> dict[str, dict[str, Any]]:
     """
     Get STP facts from the device.
 
@@ -244,9 +255,9 @@ def get_facts(facts_module, connection):
     Returns:
         dict: STP facts
     """
-    stp_facts = {}
-    mstp_facts = {}
-    pvst_facts = {}
+    stp_facts: dict[str, Any] = {}
+    mstp_facts: dict[str, Any] = {}
+    pvst_facts: dict[str, Any] = {}
 
     # Get STP basic info
     try:

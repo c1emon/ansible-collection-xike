@@ -5,33 +5,40 @@
 from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
+from typing import Any, Optional, TYPE_CHECKING
+
+from ansible.module_utils.common.text.converters import to_text
+from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.xikeos import run_commands
+
+if TYPE_CHECKING:
+    from ansible.module_utils.basic import AnsibleModule
+
+SwitchportState = dict[str, Any]
+
 
 class L2InterfacesFacts(object):
     """Gather L2 interface facts from Xike switches."""
 
-    def __init__(self, module):
+    def __init__(self, module: "AnsibleModule") -> None:
         self.module = module
-        self.facts = {}
+        self.facts: dict[str, SwitchportState] = {}
         self._get_facts()
 
-    def _get_facts(self):
+    def _get_facts(self) -> None:
         """Parse L2 interface information."""
-        # In a real implementation, this would execute:
-        # show running-config
-        # or
-        # show interface switchport
-        # and parse the output
-        #
-        # For now, we return an empty dict as facts gathering
-        # requires actual device connection
-        self.facts = {}
+        try:
+            stdout = run_commands(self.module, ['show running-config'], check_rc=True) or []
+            output = to_text(stdout[0] if stdout else '', errors='surrogate_or_strict')
+            self.facts = parse_switchport_config(output)
+        except Exception as exc:
+            self.module.fail_json(msg='failed to gather L2 interface facts: {0}'.format(to_text(exc)))
 
-    def get_facts(self):
+    def get_facts(self) -> dict[str, SwitchportState]:
         """Return gathered facts."""
         return self.facts
 
 
-def parse_switchport_config(config_text):
+def parse_switchport_config(config_text: str) -> dict[str, SwitchportState]:
     """Parse switchport configuration from running-config output.
 
     Args:
@@ -40,8 +47,8 @@ def parse_switchport_config(config_text):
     Returns:
         dict: Parsed interface configurations keyed by interface name
     """
-    interfaces = {}
-    current_interface = None
+    interfaces: dict[str, SwitchportState] = {}
+    current_interface: Optional[str] = None
 
     for line in config_text.splitlines():
         line = line.strip()
@@ -76,7 +83,7 @@ def parse_switchport_config(config_text):
     return interfaces
 
 
-def parse_interface_switchport(output):
+def parse_interface_switchport(output: str) -> SwitchportState:
     """Parse 'show interface switchport' output for a single interface.
 
     Args:
@@ -85,7 +92,7 @@ def parse_interface_switchport(output):
     Returns:
         dict: Interface switchport configuration
     """
-    result = {
+    result: SwitchportState = {
         'mode': None,
         'access_vlan': None,
         'trunk_allowed_vlan': None,

@@ -113,6 +113,15 @@ commands:
 """
 
 from ansible.module_utils.basic import AnsibleModule
+from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config
+from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.lifecycle import run_resource_module_lifecycle
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from ansible.module_utils.basic import AnsibleModule as AnsibleModuleType
+
+L2InterfaceConfig = dict[str, Any]
+L2InterfaceState = dict[str, L2InterfaceConfig]
 
 try:
     from ansible_collections.xike.xikeos.plugins.module_utils.facts.l2_interfaces import L2InterfacesFacts
@@ -121,7 +130,7 @@ except ImportError:
     HAS_FACTS = False
 
 
-def parse_vlan_str(vlan_str):
+def parse_vlan_str(vlan_str: object) -> str | None:
     """Parse VLAN string like '10,20,30' or 'all' into a normalized format."""
     if not vlan_str:
         return None
@@ -131,9 +140,13 @@ def parse_vlan_str(vlan_str):
     return vlan_str
 
 
-def build_commands(config, state, existing_config):
+def build_commands(
+    config: L2InterfaceConfig,
+    state: str,
+    existing_config: L2InterfaceState,
+) -> list[str]:
     """Build CLI commands from config, respecting link-type ordering."""
-    commands = []
+    commands: list[str] = []
     interface_name = config['name']
 
     # Get existing config for this interface
@@ -195,7 +208,47 @@ def build_commands(config, state, existing_config):
     return commands
 
 
-def main():
+def build_lifecycle_commands(
+    config_list: list[L2InterfaceConfig],
+    state: str,
+    existing_config: L2InterfaceState,
+) -> list[str]:
+    """Build commands for all requested L2 interface configs."""
+    commands: list[str] = []
+    for config in config_list:
+        commands.extend(build_commands(config, state, existing_config))
+    return commands
+
+
+def build_after_state(
+    before: L2InterfaceState,
+    desired: list[L2InterfaceConfig],
+    state: str,
+) -> L2InterfaceState:
+    """Build the expected normalized L2 interface state after lifecycle execution."""
+    after = dict(before)
+    if state == 'replaced':
+        after = {}
+    for config in desired:
+        current = dict(after.get(config['name'], {}))
+        current.update(config)
+        after[config['name']] = current
+    return after
+
+
+def gather_l2_interfaces(module: "AnsibleModuleType") -> L2InterfaceState:
+    """Gather L2 interface facts required for idempotent diffing."""
+    if not HAS_FACTS:
+        module.fail_json(msg='L2 interface facts support is required for diffing')
+        return {}
+    try:
+        return L2InterfacesFacts(module).get_facts()
+    except Exception as exc:
+        module.fail_json(msg='failed to gather L2 interface facts: {0}'.format(exc))
+        return {}
+
+
+def main() -> None:
     module = AnsibleModule(
         argument_spec=dict(
             config=dict(
@@ -220,48 +273,20 @@ def main():
         supports_check_mode=True,
     )
 
-    config_list = module.params.get('config', [])
+    config_list = module.params.get('config', []) or []
     state = module.params.get('state', 'merged')
-
-    # Gather existing facts
-    if HAS_FACTS:
-        facts = L2InterfacesFacts(module)
-        existing_config = facts.get_facts()
-    else:
-        existing_config = {}
-
-    result = {
-        'changed': False,
-        'commands': [],
-        'before': existing_config,
-    }
-
-    all_commands = []
-
-    if state == 'merged':
-        # In merged mode, apply each config entry
-        for config in config_list:
-            commands = build_commands(config, state, existing_config)
-            all_commands.extend(commands)
-    elif state == 'replaced':
-        # In replaced mode, we need to build commands for all interfaces
-        # specified in config, potentially removing unmentioned interfaces
-        for config in config_list:
-            commands = build_commands(config, state, existing_config)
-            all_commands.extend(commands)
-
-    result['commands'] = all_commands
-
-    if module.check_mode:
-        module.exit_json(**result)
-
-    # After applying commands, gather new facts
-    result['changed'] = bool(all_commands)
-
-    # Simulate after state (in real implementation, would re-run facts)
-    result['after'] = existing_config
-
-    module.exit_json(**result)
+    run_resource_module_lifecycle(
+        module=module,
+        config=config_list,
+        state=state,
+        gather=gather_l2_interfaces,
+        build_commands=build_lifecycle_commands,
+        build_after=build_after_state,
+        mutating_states=('merged', 'replaced'),
+        rendered_states=(),
+        apply_config=load_config,
+        gather_after_apply=True,
+    )
 
 
 if __name__ == '__main__':

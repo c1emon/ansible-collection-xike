@@ -23,9 +23,9 @@ The `xike.xikeos` collection provides Ansible modules for automating **Xike (兮
 - **Hybrid port mode** — a Xike-specific feature for flexible VLAN tagging
 - **ERPS/EAPS** ring protection for carrier-grade Ethernet
 - **QinQ tunneling** for service provider deployments
-- **Reference execution path** for `xikeos_command`, `xikeos_config`, and `xikeos_vlans` through `network_cli`/cliconf
-- **Reference idempotent VLAN module** with current-state gathering, check mode, and `before`/`after` results
-- Other resource modules currently provide command-generation/planned-command behavior and are candidates for follow-up execution-path refactors.
+- **Network execution path** for operational commands and configuration through `network_cli`/cliconf helpers
+- **Lifecycle-complete resource modules** for VLANs, static routes, ACLs, and interface families with current-state gathering, check mode, `load_config()` apply, and `before`/`after` results
+- **Explicit non-mutating `rendered` state** for specialty modules that are not yet lifecycle-complete, with mutating states failing fast instead of reporting unapplied changes
 
 ## Architecture
 
@@ -233,7 +233,7 @@ all:
 
 ### ✅ 模块覆盖（19 章）
 
-> 状态说明：`xikeos_command`、`xikeos_config`、`xikeos_vlans` 已接入 `network_cli`/cliconf 执行路径；其余资源模块目前主要生成/报告计划命令，尚未全部完成真机执行路径重构。
+> 状态说明：`xikeos_vlans`、`xikeos_static_routes`、`xikeos_acls`、`xikeos_interfaces`、`xikeos_l2_interfaces`、`xikeos_l3_interfaces`、`xikeos_lag_interfaces` 已按资源模块生命周期接入 facts/diff/check-mode/`load_config()` 执行路径。STP、ERPS、EAPS、QinQ、mirror、port isolation、flex/monitor link、OSPFv2 当前为显式非变更 `rendered` 行为；未完成生命周期前，变更型状态会 fail fast，避免报告未实际应用的 `changed: true`。
 
 | 手册章节 | 功能 | 对应模块 | 备注 |
 |---------|------|---------|------|
@@ -746,7 +746,7 @@ all:
 
 ### Partial Deployment
 
-> Only `xikeos_vlans` and `xikeos_config` in this example execute through the current reference path. L2/L3 modules shown here currently report planned commands and need follow-up execution-path refactors before they can be used for full deployment.
+> The VLAN, L2, L3, LAG, base interface, static route, and ACL resource modules follow the lifecycle contract and apply changes through `load_config()` outside check mode. Specialty modules that are not lifecycle-complete expose `state=rendered` for non-mutating command output and fail fast for mutating states.
 
 ```yaml
 # deploy_switch.yml

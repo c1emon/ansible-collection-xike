@@ -5,45 +5,43 @@
 from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
+from typing import Any, Optional, TYPE_CHECKING
+
+from ansible.module_utils.common.text.converters import to_text
+from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.xikeos import run_commands
+
+if TYPE_CHECKING:
+    from ansible.module_utils.basic import AnsibleModule
+
 
 class L3InterfacesFacts(object):
     """Gather L3 interface facts from Xike switches."""
 
-    def __init__(self, module):
+    def __init__(self, module: "AnsibleModule") -> None:
         self.module = module
-        self.facts = {}
+        self.facts: dict[str, dict[str, list[dict[str, Any]]]] = {}
         self._get_facts()
 
-    def _get_facts(self):
+    def _get_facts(self) -> None:
         """Parse L3 interface information.
 
         Executes 'show interface vlan-interface' commands on the device
         and parses IP address information.
         """
-        self.facts = {}
-
         try:
-            # Try to get VLAN interface list
-            rc, out, err = self.module.run_command('show interface vlan-interface')
-            if rc != 0:
-                return
+            stdout = run_commands(self.module, ['show running-config'], check_rc=True) or []
+            output = to_text(stdout[0] if stdout else '', errors='surrogate_or_strict')
+            self.facts = parse_running_config(output)
+        except Exception as exc:
+            self.module.fail_json(msg='failed to gather L3 interface facts: {0}'.format(to_text(exc)))
 
-            # Parse interface names from output
-            interfaces = self._parse_interface_list(out)
-            for iface_name in interfaces:
-                rc2, iface_out, err2 = self.module.run_command(
-                    'show interface vlan-interface {0}'.format(iface_name)
-                )
-                if rc2 == 0:
-                    parsed = parse_interface_ip(iface_out)
-                    if parsed.get('ipv4') or parsed.get('ipv6'):
-                        self.facts[iface_name] = parsed
-        except Exception:
-            pass
+    def get_facts(self) -> dict[str, dict[str, list[dict[str, Any]]]]:
+        """Return gathered facts."""
+        return self.facts
 
-    def _parse_interface_list(self, output):
+    def _parse_interface_list(self, output: str) -> list[str]:
         """Parse interface names from 'show interface vlan-interface' output."""
-        interfaces = []
+        interfaces: list[str] = []
         for line in output.splitlines():
             line = line.strip()
             # Look for lines like "Vlan-interface1" or "vlan-interface 1"
@@ -60,7 +58,7 @@ class L3InterfacesFacts(object):
         return interfaces
 
 
-def parse_running_config(config_text):
+def parse_running_config(config_text: str) -> dict[str, dict[str, list[dict[str, Any]]]]:
     """Parse L3 interface configuration from running-config output.
 
     Args:
@@ -69,8 +67,8 @@ def parse_running_config(config_text):
     Returns:
         dict: Parsed interface configurations keyed by interface name
     """
-    interfaces = {}
-    current_interface = None
+    interfaces: dict[str, dict[str, list[dict[str, Any]]]] = {}
+    current_interface: Optional[str] = None
 
     for line in config_text.splitlines():
         line = line.strip()
@@ -107,7 +105,7 @@ def parse_running_config(config_text):
     return interfaces
 
 
-def parse_interface_ip(output):
+def parse_interface_ip(output: str) -> dict[str, list[dict[str, Any]]]:
     """Parse 'show interface vlan-interface <id>' output for IP addresses.
 
     Args:
@@ -116,7 +114,7 @@ def parse_interface_ip(output):
     Returns:
         dict: Interface IP configuration with 'ipv4' and 'ipv6' lists
     """
-    result = {
+    result: dict[str, list[dict[str, Any]]] = {
         'ipv4': [],
         'ipv6': [],
     }

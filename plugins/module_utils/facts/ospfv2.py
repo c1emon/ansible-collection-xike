@@ -7,6 +7,13 @@ from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
 import re
+from typing import Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ansible.module_utils.basic import AnsibleModule
+
+OSPFProcess = dict[str, Any]
+OSPFNeighbor = dict[str, Any]
 
 
 class Ospfv2Facts(object):
@@ -16,12 +23,12 @@ class Ospfv2Facts(object):
     and 'show running-config' to parse OSPF configuration and state.
     """
 
-    def __init__(self, module):
+    def __init__(self, module: "AnsibleModule") -> None:
         self.module = module
-        self.facts = {}
+        self.facts: dict[str, Any] = {}
         self._get_facts()
 
-    def _get_facts(self):
+    def _get_facts(self) -> None:
         """Parse OSPFv2 information from the device."""
         self.facts = {
             'processes': {},
@@ -44,7 +51,7 @@ class Ospfv2Facts(object):
             pass
 
 
-def parse_ospf_summary(output):
+def parse_ospf_summary(output: str) -> dict[int, OSPFProcess]:
     """Parse 'show ip ospf' output to extract OSPF process info.
 
     Expected output format (similar to Cisco IOS):
@@ -69,7 +76,7 @@ def parse_ospf_summary(output):
     Returns:
         dict: Parsed OSPF process info keyed by process ID
     """
-    processes = {}
+    processes: dict[int, OSPFProcess] = {}
     current_process_id = None
 
     for line in output.splitlines():
@@ -104,7 +111,7 @@ def parse_ospf_summary(output):
     return processes
 
 
-def parse_ospf_neighbors(output):
+def parse_ospf_neighbors(output: str) -> list[OSPFNeighbor]:
     """Parse 'show ip ospf neighbor' output.
 
     Expected output format:
@@ -119,7 +126,7 @@ def parse_ospf_neighbors(output):
     Returns:
         list: List of neighbor dicts
     """
-    neighbors = []
+    neighbors: list[OSPFNeighbor] = []
     header_passed = False
 
     for line in output.splitlines():
@@ -156,7 +163,7 @@ def parse_ospf_neighbors(output):
     return neighbors
 
 
-def parse_running_config(config_text):
+def parse_running_config(config_text: str) -> dict[int, OSPFProcess]:
     """Parse OSPF configuration from running-config output.
 
     Args:
@@ -165,7 +172,7 @@ def parse_running_config(config_text):
     Returns:
         dict: Parsed OSPF configuration keyed by process ID
     """
-    processes = {}
+    processes: dict[int, OSPFProcess] = {}
     current_pid = None
     in_router_ospf = False
 
@@ -265,7 +272,7 @@ def parse_running_config(config_text):
     return processes
 
 
-def parse_ospf_database(output):
+def parse_ospf_database(output: str) -> dict[str, int]:
     """Parse 'show ip ospf database' output.
 
     Args:
@@ -274,7 +281,7 @@ def parse_ospf_database(output):
     Returns:
         dict: OSPF LSDB summary
     """
-    result = {
+    result: dict[str, int] = {
         'router_lsa_count': 0,
         'network_lsa_count': 0,
         'summary_lsa_count': 0,

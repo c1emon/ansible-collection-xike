@@ -6,6 +6,8 @@
 from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
+from typing import Any
+
 import re
 
 from ansible_collections.xike.xikeos.plugins.module_utils.xikeos import (
@@ -13,7 +15,7 @@ from ansible_collections.xike.xikeos.plugins.module_utils.xikeos import (
 )
 
 
-def parse_erps_brief(output):
+def parse_erps_brief(output: str | None) -> dict[str, list[dict[str, Any]]]:
     """
     Parse 'show erps' output and return ERPS facts.
 
@@ -24,7 +26,10 @@ def parse_erps_brief(output):
     1         100           Eth1/0/1      Eth1/0/2      Revertive     Active
     2         200           Eth-Trunk1    Eth-Trunk2    Non-revertive Active
     """
-    facts = {"instances": []}
+    facts: dict[str, list[dict[str, Any]]] = {"instances": []}
+
+    if output is None or output == "":
+        return facts
 
     lines = output.strip().split("\n")
 
@@ -65,7 +70,7 @@ def parse_erps_brief(output):
     return facts
 
 
-def parse_erps_instance(output, instance_id):
+def parse_erps_instance(output: str | None, instance_id: int) -> dict[str, Any]:
     """
     Parse 'show erps instance <id>' output and return detailed ERPS instance facts.
 
@@ -81,7 +86,10 @@ def parse_erps_instance(output, instance_id):
     WTR Timer: 5 min
     MEL: 5
     """
-    facts = {"instance_id": instance_id}
+    facts: dict[str, Any] = {"instance_id": instance_id}
+
+    if output is None or output == "":
+        return facts
 
     lines = output.strip().split("\n")
 
@@ -147,7 +155,7 @@ def parse_erps_instance(output, instance_id):
     return facts
 
 
-def parse_erps_statistics(output):
+def parse_erps_statistics(output: str | None) -> dict[str, list[dict[str, Any]]]:
     """
     Parse 'show erps statistics' output and return ERPS statistics facts.
 
@@ -157,7 +165,10 @@ def parse_erps_statistics(output):
     1         1234       5678       90        12        5
     2         100        200        10        3         1
     """
-    facts = {"instances": []}
+    facts: dict[str, list[dict[str, Any]]] = {"instances": []}
+
+    if output is None or output == "":
+        return facts
 
     lines = output.strip().split("\n")
 
@@ -190,7 +201,7 @@ def parse_erps_statistics(output):
     return facts
 
 
-def get_facts(facts_module, connection):
+def get_facts(facts_module: Any, connection: Any) -> dict[str, dict[str, Any]]:
     """
     Get ERPS facts from the device.
 
@@ -201,7 +212,7 @@ def get_facts(facts_module, connection):
     Returns:
         dict: ERPS facts
     """
-    erps_facts = {}
+    erps_facts: dict[str, Any] = {}
 
     # Get ERPS brief info
     try:
@@ -212,7 +223,7 @@ def get_facts(facts_module, connection):
 
     # Get detailed info for each instance
     instances = erps_facts.get("instances", [])
-    detailed_instances = []
+    detailed_instances: list[dict[str, Any]] = []
     for inst in instances:
         instance_id = inst.get("instance_id")
         if instance_id is not None:

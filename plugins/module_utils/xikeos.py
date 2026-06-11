@@ -51,6 +51,6 @@ SPEED_OPTIONS = ['10', '100', '1000', '10000', 'auto']
 DUPLEX_OPTIONS = ['auto', 'full', 'half']
 
 
-def map_command(key):
+def map_command(key: str) -> str:
     """Map a logical command key to Xike CLI command."""
     return COMMAND_MAP.get(key, key)

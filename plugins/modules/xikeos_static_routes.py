@@ -157,9 +157,12 @@ commands:
     - ipv6 route 2001:db8::/32 2001:db8::1
 """
 
-import re
-
 from ansible.module_utils.basic import AnsibleModule
+from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config
+from typing import Any
+
+RouteConfig = dict[str, Any]
+RouteKey = tuple[Any, Any, Any]
 
 try:
     from ansible_collections.xike.xikeos.plugins.module_utils.facts.static_routes import (
@@ -175,7 +178,7 @@ MIN_DISTANCE = 1
 MAX_DISTANCE = 255
 
 
-def normalize_route(route):
+def normalize_route(route: RouteConfig) -> RouteConfig:
     """Normalize a route entry for comparison.
 
     Ensures consistent format for mask (CIDR for IPv6, dotted-decimal for IPv4).
@@ -201,7 +204,7 @@ def normalize_route(route):
     return normalized
 
 
-def route_key(route):
+def route_key(route: RouteConfig) -> RouteKey:
     """Generate a unique key for a route entry."""
     r = normalize_route(route)
     return (
@@ -211,7 +214,10 @@ def route_key(route):
     )
 
 
-def build_static_route_commands(config, existing_routes):
+def build_static_route_commands(
+    config: list[RouteConfig],
+    existing_routes: list[RouteConfig],
+) -> list[str]:
     """Build CLI commands for static route configuration.
 
     Args:
@@ -221,15 +227,24 @@ def build_static_route_commands(config, existing_routes):
     Returns:
         list: CLI commands to apply
     """
-    commands = []
+    commands: list[str] = []
 
     # Normalize existing routes for comparison
-    existing_by_key = {}
+    existing_by_key: dict[RouteKey, RouteConfig] = {}
     for route in existing_routes:
         key = route_key(route)
         existing_by_key[key] = route
 
     for route in config:
+        normalized_route = normalize_route(route)
+        existing = existing_by_key.get(route_key(normalized_route))
+        if existing:
+            existing = normalize_route(existing)
+            if (
+                existing.get('next_hop') == normalized_route.get('next_hop')
+                and existing.get('distance', 1) == normalized_route.get('distance', 1)
+            ):
+                continue
         route_type = route.get('route_type', 'ipv4')
         destination = route.get('destination', '')
         mask = route.get('mask', '')
@@ -252,7 +267,10 @@ def build_static_route_commands(config, existing_routes):
     return commands
 
 
-def build_delete_commands(config, existing_routes):
+def build_delete_commands(
+    config: list[RouteConfig],
+    existing_routes: list[RouteConfig],
+) -> list[str]:
     """Build CLI commands to delete static routes.
 
     Args:
@@ -262,10 +280,10 @@ def build_delete_commands(config, existing_routes):
     Returns:
         list: CLI commands to apply
     """
-    commands = []
+    commands: list[str] = []
 
     # Create set of routes to delete
-    delete_keys = set()
+    delete_keys: set[RouteKey] = set()
     for route in config:
         delete_keys.add(route_key(route))
 
@@ -298,7 +316,7 @@ def build_delete_commands(config, existing_routes):
     return commands
 
 
-def _build_no_route_cmd(route_type, destination, mask, next_hop):
+def _build_no_route_cmd(route_type: str, destination: str, mask: str, next_hop: str) -> str | None:
     """Build a 'no ip/ipv6 route' command."""
     if route_type == 'ipv4':
         return 'no ip route {0} {1} {2}'.format(destination, mask, next_hop)
@@ -311,12 +329,15 @@ def _build_no_route_cmd(route_type, destination, mask, next_hop):
     return None
 
 
-def build_replaced_commands(config, existing_routes):
+def build_replaced_commands(
+    config: list[RouteConfig],
+    existing_routes: list[RouteConfig],
+) -> list[str]:
     """Build CLI commands for 'replaced' state.
 
     Removes all existing static routes and adds the desired ones.
     """
-    commands = []
+    commands: list[str] = []
 
     # First, delete all existing routes
     for route in existing_routes:
@@ -335,7 +356,32 @@ def build_replaced_commands(config, existing_routes):
     return commands
 
 
-def prefix_to_ipv4_mask(prefix_len):
+def build_after_state(
+    before: list[RouteConfig],
+    desired: list[RouteConfig],
+    state: str,
+) -> list[RouteConfig]:
+    """Build a normalized simulated after-state for static route lifecycle results."""
+    after_by_key = {route_key(route): normalize_route(route) for route in before}
+
+    if state == 'replaced':
+        after_by_key = {}
+
+    if state in ('merged', 'replaced'):
+        for route in desired:
+            normalized = normalize_route(route)
+            after_by_key[route_key(normalized)] = normalized
+    elif state == 'deleted':
+        if desired:
+            for route in desired:
+                after_by_key.pop(route_key(route), None)
+        else:
+            after_by_key = {}
+
+    return [after_by_key[key] for key in sorted(after_by_key)]
+
+
+def prefix_to_ipv4_mask(prefix_len: int) -> str:
     """Convert CIDR prefix length to dotted-decimal mask."""
     if prefix_len == 0:
         return '0.0.0.0'
@@ -346,7 +392,7 @@ def prefix_to_ipv4_mask(prefix_len):
     return '.'.join(str((mask_bits >> (8 * i)) & 0xFF) for i in range(3, -1, -1))
 
 
-def ipv4_mask_to_prefix(mask):
+def ipv4_mask_to_prefix(mask: str) -> int:
     """Convert dotted-decimal mask to CIDR prefix length. Returns -1 on failure."""
     try:
         parts = mask.split('.')
@@ -372,7 +418,7 @@ def ipv4_mask_to_prefix(mask):
         return -1
 
 
-def main():
+def main() -> None:
     """Main entry point for the module."""
     module_args = dict(
         config=dict(
@@ -435,20 +481,18 @@ def main():
         'after': [],
     }
 
-    # Gather existing facts
-    if HAS_FACTS:
-        try:
-            facts = StaticRoutesFacts(module)
-            existing_routes = facts.facts.get('static_routes', [])
-        except Exception:
-            existing_routes = []
-    else:
-        existing_routes = []
+    if not HAS_FACTS:
+        module.fail_json(msg='static route facts support is required for diffing')
+        return
+
+    try:
+        facts = StaticRoutesFacts(module)
+        existing_routes = facts.facts.get('static_routes', [])
+    except Exception as exc:
+        module.fail_json(msg='failed to gather static route facts: {0}'.format(exc))
+        return
 
     result['before'] = existing_routes
-
-    if module.check_mode:
-        module.exit_json(**result)
 
     # Generate commands based on state
     if state == 'merged':
@@ -462,18 +506,19 @@ def main():
 
     result['commands'] = commands
     result['changed'] = bool(commands)
+    result['after'] = build_after_state(existing_routes, config, state) if commands else existing_routes
 
-    # Re-gather facts for 'after' state (only when not in check mode)
-    if HAS_FACTS and commands:
+    if module.check_mode:
+        module.exit_json(**result)
+
+    if commands:
+        load_config(module, commands)
         try:
-            # Execute commands first
-            for cmd in commands:
-                module.run_command(cmd)
-            # Then re-gather facts
             facts_after = StaticRoutesFacts(module)
             result['after'] = facts_after.facts.get('static_routes', [])
-        except Exception:
-            pass
+        except Exception as exc:
+            module.fail_json(msg='failed to gather static route facts after apply: {0}'.format(exc))
+            return
 
     module.exit_json(**result)
 

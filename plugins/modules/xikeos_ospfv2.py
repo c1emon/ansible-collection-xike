@@ -6,6 +6,8 @@
 from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
+from typing import Any, Mapping, Optional, Sequence
+
 DOCUMENTATION = """
 module: xikeos_ospfv2
 short_description: Manage OSPFv2 routing protocol on Xike switches
@@ -83,7 +85,7 @@ options:
     description: Desired state of the configuration
     type: str
     default: merged
-    choices: ['merged', 'replaced']
+    choices: ['merged', 'replaced', 'rendered']
 author: Andy
 """
 
@@ -193,19 +195,19 @@ commands:
 """
 
 from ansible.module_utils.basic import AnsibleModule
+from ansible_collections.xike.xikeos.plugins.module_utils.network.xikeos.lifecycle import exit_rendered_or_fail
 
 try:
     from ansible_collections.xike.xikeos.plugins.module_utils.facts.ospfv2 import (
         Ospfv2Facts,
-        parse_running_config,
     )
     HAS_FACTS = True
 except ImportError:
     HAS_FACTS = False
 
 
-def _normalize_config(config):
-    """Normalize config dict, converting string area IDs to strings consistently."""
+def _normalize_config(config: Optional[Mapping[str, Any]]) -> dict[str, Any]:
+    """Normalize config and canonicalize OSPF network area values."""
     if config is None:
         return {}
     normalized = dict(config)
@@ -221,8 +223,10 @@ def _normalize_config(config):
     return normalized
 
 
-def _get_existing_process(existing_facts, process_id):
-    """Extract the config for a specific OSPF process from facts."""
+def _get_existing_process(
+    existing_facts: Mapping[str, Any], process_id: Any
+) -> dict[str, Any]:
+    """Return the stored facts for a single OSPF process if present."""
     processes = existing_facts.get('processes', {})
     proc = processes.get(process_id)
     if proc is None:
@@ -230,7 +234,9 @@ def _get_existing_process(existing_facts, process_id):
     return proc
 
 
-def build_commands(config, existing_config):
+def build_commands(
+    config: Mapping[str, Any], existing_config: Mapping[str, Any]
+) -> list[str]:
     """Build CLI commands to achieve the desired OSPF state.
 
     Args:
@@ -349,16 +355,11 @@ def build_commands(config, existing_config):
     return commands
 
 
-def build_delete_commands(config, existing_config):
-    """Build CLI commands to remove an OSPF process.
-
-    Args:
-        config: dict with process_id
-        existing_config: dict of current OSPF configs
-
-    Returns:
-        list: CLI commands to apply
-    """
+def build_delete_commands(
+    config: Mapping[str, Any],
+    existing_config: Mapping[str, Any],
+) -> list[str]:
+    """Build CLI commands that remove an OSPF process and its settings."""
     process_id = config.get('process_id')
     if process_id is None:
         return []
@@ -401,7 +402,8 @@ def build_delete_commands(config, existing_config):
     return commands
 
 
-def main():
+def main() -> None:
+    """Run the OSPFv2 module entry point."""
     module = AnsibleModule(
         argument_spec=dict(
             config=dict(
@@ -453,7 +455,7 @@ def main():
             state=dict(
                 type='str',
                 default='merged',
-                choices=['merged', 'replaced'],
+                choices=['merged', 'replaced', 'rendered'],
             ),
         ),
         supports_check_mode=True,
@@ -465,6 +467,24 @@ def main():
     # Normalize area IDs
     if config:
         config = _normalize_config(config)
+
+    if state == 'rendered':
+        exit_rendered_or_fail(
+            module,
+            'xikeos_ospfv2',
+            config,
+            state,
+            lambda cfg, _state: build_commands(cfg, {'processes': {}}),
+            'merged',
+        )
+    elif config is not None:
+        module.fail_json(
+            msg=(
+                'xikeos_ospfv2 supports state=rendered only until lifecycle-safe gather, diff, '
+                'and load_config apply support is implemented; state={0} is unsupported'
+            ).format(state)
+        )
+        return
 
     # Gather existing facts
     if HAS_FACTS:
@@ -533,10 +553,10 @@ def main():
     module.exit_json(**result)
 
 
-def _deduplicate_commands(commands):
-    """Remove redundant consecutive 'router ospf <id>' lines."""
+def _deduplicate_commands(commands: Sequence[str]) -> list[str]:
+    """Remove redundant consecutive ``router ospf`` commands."""
     if not commands:
-        return commands
+        return []
 
     deduped = []
     for cmd in commands:

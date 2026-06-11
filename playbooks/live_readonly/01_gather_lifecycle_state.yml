@@ -1,0 +1,20 @@
+---
+- name: Live read-only gathered lifecycle test
+  hosts: xike_switches
+  gather_facts: false
+
+  tasks:
+    - name: Gather VLAN state through resource lifecycle
+      xike.xikeos.xikeos_vlans:
+        state: gathered
+      register: xikeos_gathered_vlans
+
+    - name: Assert gathered VLAN state is read-only
+      ansible.builtin.assert:
+        that:
+          - not xikeos_gathered_vlans.changed
+          - xikeos_gathered_vlans.gathered is defined
+
+    - name: Display gathered VLAN state
+      ansible.builtin.debug:
+        var: xikeos_gathered_vlans.gathered

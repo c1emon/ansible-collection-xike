@@ -1,0 +1,73 @@
+---
+- name: Live read-only lifecycle-complete module check-mode tests
+  hosts: xike_switches
+  gather_facts: false
+
+  tasks:
+    - name: Check base interface lifecycle with empty config
+      xike.xikeos.xikeos_interfaces:
+        config: []
+        state: merged
+      check_mode: true
+      register: xikeos_interfaces_check
+
+    - name: Check L2 interface lifecycle with empty config
+      xike.xikeos.xikeos_l2_interfaces:
+        config: []
+        state: merged
+      check_mode: true
+      register: xikeos_l2_interfaces_check
+
+    - name: Check L3 interface lifecycle with empty config
+      xike.xikeos.xikeos_l3_interfaces:
+        config: []
+        state: merged
+      check_mode: true
+      register: xikeos_l3_interfaces_check
+
+    - name: Check LAG interface lifecycle with empty config
+      xike.xikeos.xikeos_lag_interfaces:
+        config: []
+        state: merged
+      check_mode: true
+      register: xikeos_lag_interfaces_check
+
+    - name: Check static routes lifecycle with empty config
+      xike.xikeos.xikeos_static_routes:
+        config: []
+        state: merged
+      check_mode: true
+      register: xikeos_static_routes_check
+
+    - name: Check ACL lifecycle with empty config
+      xike.xikeos.xikeos_acls:
+        config: []
+        state: merged
+      check_mode: true
+      register: xikeos_acls_check
+
+    - name: Assert lifecycle-complete modules stayed read-only
+      ansible.builtin.assert:
+        that:
+          - not xikeos_interfaces_check.changed
+          - not xikeos_l2_interfaces_check.changed
+          - not xikeos_l3_interfaces_check.changed
+          - not xikeos_lag_interfaces_check.changed
+          - not xikeos_static_routes_check.changed
+          - not xikeos_acls_check.changed
+          - xikeos_interfaces_check.before is defined
+          - xikeos_l2_interfaces_check.before is defined
+          - xikeos_l3_interfaces_check.before is defined
+          - xikeos_lag_interfaces_check.before is defined
+          - xikeos_static_routes_check.before is defined
+          - xikeos_acls_check.before is defined
+
+    - name: Display lifecycle check-mode summaries
+      ansible.builtin.debug:
+        msg:
+          interfaces: "{{ xikeos_interfaces_check.before | default({}) }}"
+          l2_interfaces: "{{ xikeos_l2_interfaces_check.before | default({}) }}"
+          l3_interfaces: "{{ xikeos_l3_interfaces_check.before | default({}) }}"
+          lag_interfaces: "{{ xikeos_lag_interfaces_check.before | default({}) }}"
+          static_routes: "{{ xikeos_static_routes_check.before | default([]) }}"
+          acls: "{{ xikeos_acls_check.before | default([]) }}"

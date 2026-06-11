@@ -6,13 +6,20 @@
 from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
+from typing import Any
+
 import os
 
 
 TTP_TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "ttp_templates")
 
 
-def parse_ttp_template(output, template_name, result_key=None, templates=None):
+def parse_ttp_template(
+    output: str | None,
+    template_name: str,
+    result_key: str | None = None,
+    templates: dict[str, str] | None = None,
+) -> Any:
     """Parse command output with a bundled TTP template.
 
     Args:
@@ -44,7 +51,8 @@ def parse_ttp_template(output, template_name, result_key=None, templates=None):
     return _flatten_ttp_result(parser.result(), result_key=result_key)
 
 
-def _load_ttp_template(template_name, templates=None):
+def _load_ttp_template(template_name: str, templates: dict[str, str] | None = None) -> str:
+    """Load a bundled TTP template, falling back to injected templates."""
     template_content = (templates or {}).get(template_name)
     if template_content is not None:
         return template_content
@@ -64,7 +72,8 @@ def _load_ttp_template(template_name, templates=None):
         return template_file.read()
 
 
-def _flatten_ttp_result(result, result_key=None):
+def _flatten_ttp_result(result: Any, result_key: str | None = None) -> Any:
+    """Normalize TTP's nested return structure into a predictable shape."""
     flattened = result
     while isinstance(flattened, list) and len(flattened) == 1:
         flattened = flattened[0]
@@ -83,7 +92,8 @@ def _flatten_ttp_result(result, result_key=None):
     return flattened
 
 
-def _ensure_list(value):
+def _ensure_list(value: Any) -> list[Any]:
+    """Return value as a list without changing non-list payloads."""
     if value is None:
         return []
     if isinstance(value, list):
