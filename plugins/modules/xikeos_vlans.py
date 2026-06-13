@@ -103,7 +103,7 @@ from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.common.text.converters import to_text
 from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.vlans import parse_vlan
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config, run_commands
-from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import run_resource_module_lifecycle
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import gather_with_error_boundary, run_resource_module_lifecycle
 
 
 def vlan_id_range(vlan_ids: list[int]) -> str:
@@ -229,16 +229,22 @@ def validate_vlan_request(module: Any, config: list[dict[str, Any]], state: str)
 
 def gather_vlans(module: Any) -> list[dict[str, Any]]:
     """Collect VLAN state from the device and normalize parsed records."""
-    try:
+    def _gather() -> list[dict[str, Any]]:
         stdout = run_commands(module, ["show vlan"], check_rc=True)
-    except Exception as exc:
-        module.fail_json(msg="failed to gather VLAN state with 'show vlan': %s" % to_text(exc))
-        return []
-    output = to_text(stdout[0] if stdout else "", errors="surrogate_or_strict")
-    return [
-        _normalize_vlan(vlan)
-        for vlan in parse_vlan(output, textfsm_templates=module.params.get("_textfsm_templates"))
-    ]
+        output = to_text(stdout[0] if stdout else "", errors="surrogate_or_strict")
+        return [
+            _normalize_vlan(vlan)
+            for vlan in parse_vlan(output, textfsm_templates=module.params.get("_textfsm_templates"))
+        ]
+
+    return gather_with_error_boundary(
+        module,
+        _gather,
+        "failed to gather VLAN state with 'show vlan'",
+        "vlans",
+        [],
+        include_exception_in_msg=True,
+    )
 
 
 def build_after_state(before: list[dict[str, Any]], desired: list[dict[str, Any]], state: str) -> list[dict[str, Any]]:

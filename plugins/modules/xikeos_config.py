@@ -49,6 +49,7 @@ EXAMPLES = """
 """
 
 from ansible.module_utils.basic import AnsibleModule
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.errors import XikeOSError
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config, run_commands
 
 
@@ -89,11 +90,25 @@ def main() -> None:
         module.exit_json(**result)
 
     if lines:
-        response = load_config(module, lines)
+        try:
+            response = load_config(module, lines)
+        except XikeOSError as exc:
+            module.fail_json(msg='failed to apply configuration', changed=bool(lines), saved=False, commands=list(lines), error=str(exc), detail=getattr(exc, 'detail', None), context=getattr(exc, 'context', 'config'))
+            return
+        except Exception as exc:
+            module.fail_json(msg='failed to apply configuration', changed=bool(lines), saved=False, commands=list(lines), error=str(exc), context='config')
+            return
         result['response'] = response.get('response', response) if isinstance(response, dict) else response
 
     if save and result['changed']:
-        run_commands(module, [SAVE_COMMAND], check_rc=True)
+        try:
+            run_commands(module, [SAVE_COMMAND], check_rc=True)
+        except XikeOSError as exc:
+            module.fail_json(msg='failed to save configuration after apply', changed=True, saved=False, commands=result['commands'] + [SAVE_COMMAND], applied=bool(lines), error=str(exc), detail=getattr(exc, 'detail', None), context=getattr(exc, 'context', 'config'))
+            return
+        except Exception as exc:
+            module.fail_json(msg='failed to save configuration after apply', changed=True, saved=False, commands=result['commands'] + [SAVE_COMMAND], applied=bool(lines), error=str(exc), context='config')
+            return
         result['commands'].append(SAVE_COMMAND)
         result['saved'] = True
 

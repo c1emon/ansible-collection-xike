@@ -213,7 +213,9 @@ commands:
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.acls import AclsFacts
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.errors import XikeOSError
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import gather_with_error_boundary
 from typing import Any
 
 AclRule = dict[str, Any]
@@ -293,7 +295,6 @@ def build_acl_commands(config: list[AclConfig], existing_acls: list[AclConfig]) 
     for acl_config in config:
         acl_id = acl_config['acl_id']
         acl_type = acl_config.get('acl_type', 'standard')
-        remark = acl_config.get('remark', '')
         rules = acl_config.get('rules', [])
 
         existing = existing_by_id.get(acl_id, {})
@@ -541,12 +542,13 @@ def main() -> None:
         commands = build_acl_commands(config, [])
         module.exit_json(changed=False, commands=commands, rendered=commands)
 
-    try:
-        facts = AclsFacts(module)
-        existing_acls = facts.facts.get('acls', [])
-    except Exception as exc:
-        module.fail_json(msg='failed to gather ACL facts: {0}'.format(exc))
-        return
+    existing_acls = gather_with_error_boundary(
+        module,
+        lambda: AclsFacts(module).facts.get('acls', []),
+        'failed to gather ACL facts',
+        'acls',
+        [],
+    )
 
     result['before'] = existing_acls
 
@@ -571,13 +573,24 @@ def main() -> None:
         module.exit_json(**result)
 
     if commands:
-        load_config(module, commands)
         try:
-            facts_after = AclsFacts(module)
-            result['after'] = facts_after.facts.get('acls', [])
-        except Exception as exc:
-            module.fail_json(msg='failed to gather ACL facts after apply: {0}'.format(exc))
+            load_config(module, commands)
+        except XikeOSError as exc:
+            module.fail_json(msg='failed to apply ACL configuration', changed=True, commands=commands, before=existing_acls, after=result['after'], error=str(exc), detail=getattr(exc, 'detail', None), context=getattr(exc, 'context', 'acls'))
             return
+        result['after'] = gather_with_error_boundary(
+            module,
+            lambda: AclsFacts(module).facts.get('acls', []),
+            'failed to gather ACL facts after apply',
+            'acls',
+            result['after'],
+            {
+                'changed': True,
+                'commands': commands,
+                'before': existing_acls,
+                'after': result['after'],
+            },
+        )
 
     module.exit_json(**result)
 

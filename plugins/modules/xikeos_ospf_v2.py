@@ -246,9 +246,6 @@ def build_commands(
     commands = []
     existing = _get_existing_process(existing_config, process_id)
 
-    # Check if the process already exists
-    process_exists = bool(existing)
-
     # --- Router ospf entry command ---
     commands.append('router ospf {0}'.format(process_id))
 

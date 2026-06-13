@@ -7,6 +7,7 @@ import re
 from typing import Any, TYPE_CHECKING
 
 from ansible.module_utils.common.text.converters import to_text
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.errors import XikeOSFactsError
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.xikeos import run_commands
 
 if TYPE_CHECKING:
@@ -30,7 +31,7 @@ class InterfacesFacts(object):
             output = to_text(stdout[0] if stdout else '', errors='surrogate_or_strict')
             self.facts = {iface['name']: iface for iface in parse_interface_brief(output)}
         except Exception as exc:
-            self.module.fail_json(msg='failed to gather interface facts: {0}'.format(to_text(exc)))
+            raise XikeOSFactsError('failed to gather interface facts', detail=to_text(exc), context='interfaces') from exc
 
     def get_facts(self) -> dict[str, InterfaceFacts]:
         """Return the parsed interface facts."""

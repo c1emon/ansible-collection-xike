@@ -2,15 +2,48 @@ from __future__ import absolute_import, division, print_function
 
 __metaclass__ = type
 
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any, Callable, TypeVar
 
 if TYPE_CHECKING:
     from ansible.module_utils.basic import AnsibleModule
 
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.errors import XikeOSError
 
 
 DEFAULT_MUTATING_STATES: tuple[str, ...] = ("merged", "replaced", "overridden", "deleted")
+T = TypeVar("T")
+
+
+def gather_with_error_boundary(
+    module: "AnsibleModule",
+    gather: Callable[[], T],
+    msg: str,
+    context: str,
+    fallback: T,
+    fail_kwargs: dict[str, Any] | None = None,
+    include_exception_in_msg: bool = False,
+) -> T:
+    """Run a resource gather callback and convert failures into module errors."""
+    payload = dict(fail_kwargs or {})
+    try:
+        return gather()
+    except XikeOSError as exc:
+        payload.update(
+            msg=msg,
+            error=str(exc),
+            detail=getattr(exc, "detail", None),
+            context=getattr(exc, "context", context),
+        )
+        module.fail_json(
+            **payload,
+        )
+        return fallback
+    except Exception as exc:
+        fail_msg = "{0}: {1}".format(msg, exc) if include_exception_in_msg else msg
+        payload.update(msg=fail_msg, error=str(exc), context=context)
+        module.fail_json(**payload)
+        return fallback
 
 
 def run_resource_module_lifecycle(
@@ -75,7 +108,21 @@ def run_resource_module_lifecycle(
         commands = build_commands(config, state, [] if rendered_current is None else rendered_current)
         module.exit_json(changed=False, commands=commands, **{rendered_key: commands})
 
-    before = gather(module)
+    try:
+        before = gather(module)
+    except XikeOSError as exc:
+        module.fail_json(
+            msg="failed to gather resource state",
+            changed=False,
+            commands=[],
+            before=[],
+            after=[],
+            gather_context=getattr(gather, "__name__", "resource gather"),
+            error=str(exc),
+            detail=getattr(exc, "detail", None),
+            resource_commands=getattr(exc, "commands", None),
+        )
+        return
     result["before"] = before
 
     if state in gathered_states:
@@ -98,9 +145,37 @@ def run_resource_module_lifecycle(
         module.exit_json(**result)
 
     if commands:
-        apply_config(module, commands)
+        try:
+            apply_config(module, commands)
+        except XikeOSError as exc:
+            module.fail_json(
+                msg="failed to apply resource commands",
+                changed=True,
+                commands=commands,
+                before=before,
+                after=result["after"],
+                partial_change=True,
+                error=str(exc),
+                detail=getattr(exc, "detail", None),
+                resource_commands=getattr(exc, "commands", commands),
+            )
+            return
         if gather_after_apply:
-            result["after"] = gather(module)
+            try:
+                result["after"] = gather(module)
+            except XikeOSError as exc:
+                module.fail_json(
+                    msg="failed to verify final state after applying resource commands",
+                    changed=True,
+                    commands=commands,
+                    before=before,
+                    after=result["after"],
+                    verification_context="final-state",
+                    error=str(exc),
+                    detail=getattr(exc, "detail", None),
+                    resource_commands=getattr(exc, "commands", None),
+                )
+                return
 
     module.exit_json(**result)
 

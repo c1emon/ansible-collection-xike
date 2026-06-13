@@ -33,7 +33,7 @@ EXAMPLES = """
 - name: Connect to Xike switch
   hosts: xike_switches
   connection: c1emon.xikeos.xikeos
-  gather_facts: no
+  gather_facts: false
   tasks:
     - name: Get version info
       c1emon.xikeos.xikeos_command:

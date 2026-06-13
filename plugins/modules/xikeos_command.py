@@ -63,6 +63,7 @@ EXAMPLES = """
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.common.text.converters import to_text
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.errors import XikeOSError
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.xikeos import run_commands
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.safety import (
     find_mutating_commands,
@@ -156,8 +157,11 @@ def main() -> None:
                 break
             if attempt < retries - 1:
                 time.sleep(interval)
+    except XikeOSError as exc:
+        module.fail_json(msg='command execution failed', commands=commands, error=str(exc), detail=getattr(exc, 'detail', None), context=getattr(exc, 'context', 'command'))
+        return
     except Exception as exc:
-        module.fail_json(msg='command execution failed', commands=commands, error=to_text(exc))
+        module.fail_json(msg='command execution failed', commands=commands, error=to_text(exc), context='command')
 
     if failed_conditions:
         module.fail_json(

@@ -35,6 +35,7 @@ from ansible_collections.c1emon.xikeos.plugins.modules import (
     xikeos_vlans as vlans_module,
 )
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos import xikeos as network_utils
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos import errors as xikeos_errors
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos import safety as safety_utils
 from ansible_collections.c1emon.xikeos.plugins.terminal.xikeos import TerminalModule
 
@@ -165,6 +166,35 @@ def test_network_load_config_uses_candidate_and_propagates_typeerror():
     connection.edit_config.assert_called_once_with(candidate=["vlan 10"])
 
 
+def test_network_helpers_raise_typed_errors_on_connection_failure():
+    module = Mock()
+    connection = Mock()
+    connection.run_commands.side_effect = network_utils.ConnectionError("transport lost")
+    connection.get_config.side_effect = network_utils.ConnectionError("config lost")
+    connection.edit_config.side_effect = network_utils.ConnectionError("apply lost")
+
+    with patch.object(network_utils, "get_connection", return_value=connection):
+        with pytest.raises(xikeos_errors.XikeOSCommandError):
+            network_utils.run_commands(module, ["show version"])
+
+    with patch.object(network_utils, "get_connection", return_value=connection):
+        with pytest.raises(xikeos_errors.XikeOSConnectionError):
+            network_utils.get_config(module)
+
+    with patch.object(network_utils, "get_connection", return_value=connection):
+        with pytest.raises(xikeos_errors.XikeOSConfigError):
+            network_utils.load_config(module, ["vlan 10"])
+
+
+def test_xikeos_error_string_and_detail_fields():
+    err = xikeos_errors.XikeOSConfigError("boom", commands=["vlan 10"], detail="details", context="config")
+
+    assert str(err) == "boom"
+    assert err.commands == ["vlan 10"]
+    assert err.detail == "details"
+    assert err.context == "config"
+
+
 def test_network_load_config_decodes_json_string_response():
     module = Mock()
     connection = Mock()
@@ -282,6 +312,19 @@ def test_xikeos_facts_gathers_resource_facts_under_ansible_network_resources():
     ]
 
 
+def test_xikeos_facts_reports_context_for_typed_gather_failures():
+    module = _fake_module({"gather_subset": ["min"], "gather_network_resources": ["vlans"]})
+    module.fail_json.side_effect = ExitJson
+
+    with patch.object(facts_module, "AnsibleModule", return_value=module), patch.object(
+        facts_module, "run_commands", side_effect=xikeos_errors.XikeOSCommandError("show version failed", commands=["show version"], detail="lost")
+    ), patch.object(facts_module, "gather_vlans", side_effect=xikeos_errors.XikeOSFactsError("vlan gather failed", detail="bad", context="vlans")):
+        with pytest.raises(ExitJson):
+            facts_module.main()
+
+    assert module.fail_json.call_args.kwargs["context"] in {"device", "vlans"}
+
+
 def test_xikeos_facts_golden_sks8300_resource_shapes_are_config_compatible():
     module = _fake_module({"gather_subset": ["min"], "gather_network_resources": ["vlans", "l2_interfaces", "l3_interfaces"]})
     version_output = "Hostname: sks8300-a\nSoftware version: V300SP10240912\nModel: SKS8300"
@@ -336,6 +379,37 @@ def test_xikeos_config_check_mode_and_save_flow():
     }
     load_mock.assert_called_once_with(module, ["vlan 10"])
     run_mock.assert_called_once_with(module, [config_module.SAVE_COMMAND], check_rc=True)
+
+
+def test_xikeos_config_apply_failure_stops_before_save():
+    module = _fake_module({"lines": ["vlan 10"], "save": True})
+    module.fail_json.side_effect = ExitJson
+
+    with patch.object(config_module, "AnsibleModule", return_value=module), patch.object(
+        config_module, "load_config", side_effect=xikeos_errors.XikeOSConfigError("apply failed", commands=["vlan 10"], detail="down")
+    ), patch.object(config_module, "run_commands") as run_mock:
+        with pytest.raises(ExitJson):
+            config_module.main()
+
+    run_mock.assert_not_called()
+    assert module.fail_json.call_args.kwargs["changed"] is True
+    assert module.fail_json.call_args.kwargs["saved"] is False
+    assert module.fail_json.call_args.kwargs["commands"] == ["vlan 10"]
+
+
+def test_xikeos_config_save_failure_reports_applied_context():
+    module = _fake_module({"lines": ["vlan 10"], "save": True})
+    module.fail_json.side_effect = ExitJson
+
+    with patch.object(config_module, "AnsibleModule", return_value=module), patch.object(
+        config_module, "load_config", return_value={"response": ["ok"]}
+    ), patch.object(config_module, "run_commands", side_effect=xikeos_errors.XikeOSCommandError("save failed", commands=[config_module.SAVE_COMMAND], detail="disk full")):
+        with pytest.raises(ExitJson):
+            config_module.main()
+
+    assert module.fail_json.call_args.kwargs["changed"] is True
+    assert module.fail_json.call_args.kwargs["saved"] is False
+    assert module.fail_json.call_args.kwargs["commands"] == ["vlan 10", config_module.SAVE_COMMAND]
 
 
 def test_xikeos_config_warns_or_rejects_unsupported_diff_and_backup():
@@ -570,7 +644,8 @@ def test_static_routes_facts_failure_is_explicit():
     ), pytest.raises(ExitJson):
         static_routes_module.main()
 
-    assert "route gather failed" in module.fail_json.call_args.kwargs["msg"]
+    assert module.fail_json.call_args.kwargs["msg"] == "failed to gather static route facts"
+    assert module.fail_json.call_args.kwargs["error"] == "route gather failed"
 
 
 def test_acls_lifecycle_uses_network_apply_and_check_mode_computes_diff():
@@ -609,7 +684,8 @@ def test_acls_facts_failure_is_explicit():
     ), pytest.raises(ExitJson):
         acls_module.main()
 
-    assert "ACL gather failed" in module.fail_json.call_args.kwargs["msg"]
+    assert module.fail_json.call_args.kwargs["msg"] == "failed to gather ACL facts"
+    assert module.fail_json.call_args.kwargs["error"] == "ACL gather failed"
 
 
 @pytest.mark.parametrize(
@@ -699,7 +775,8 @@ def test_interface_family_lifecycle(module_under_test, facts_attr, facts_class, 
     ), pytest.raises(ExitJson):
         module_under_test.main()
 
-    assert "facts failed" in failing.fail_json.call_args.kwargs["msg"]
+    assert failing.fail_json.call_args.kwargs["msg"].startswith("failed to gather")
+    assert failing.fail_json.call_args.kwargs["error"] == "facts failed"
 
 
 @pytest.mark.parametrize(
