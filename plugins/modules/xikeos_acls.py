@@ -13,10 +13,10 @@ version_added: "0.1.0"
 description:
   - This module provides declarative management of ACLs on Xike (兮克) OS devices.
   - Manages Standard, MAC, and Mixed ACLs.
-  - Xike OS uses different ACL numbering than Cisco IOS:
-    - Standard ACL: 1-999
-    - MAC ACL: 1000-1999
-    - Mixed ACL: 2000-2999
+  - Xike OS uses different ACL numbering than Cisco IOS.
+  - Standard ACL range is 1-999.
+  - MAC ACL range is 1000-1999.
+  - Mixed ACL range is 2000-2999.
 options:
   config:
     description:
@@ -28,10 +28,10 @@ options:
       acl_id:
         description:
           - ACL identifier number.
-          - Valid ranges depend on C(acl_type):
-            - Standard: 1-999
-            - MAC: 1000-1999
-            - Mixed: 2000-2999
+          - Valid ranges depend on C(acl_type).
+          - Standard ACL range is 1-999.
+          - MAC ACL range is 1000-1999.
+          - Mixed ACL range is 2000-2999.
         type: int
         required: true
       acl_type:
@@ -71,24 +71,24 @@ options:
           protocol:
             description:
               - Protocol to match.
-              - For Standard ACL: always 'ip'.
-              - For MAC ACL: always 'mac'.
-              - For Mixed ACL: 'ip', 'tcp', 'udp', 'icmp', etc.
+              - For Standard ACL, always 'ip'.
+              - For MAC ACL, always 'mac'.
+              - For Mixed ACL, 'ip', 'tcp', 'udp', 'icmp', etc.
             type: str
             default: 'ip'
           source:
             description:
               - Source address to match.
               - Can be an IP address, network/wildcard, or 'any'.
-              - For MAC ACL: MAC address in HHHH.HHHH.HHHH format.
+              - For MAC ACL, MAC address in HHHH.HHHH.HHHH format.
             type: str
             required: true
           destination:
             description:
               - Destination address to match.
               - Can be an IP address, network/wildcard, or 'any'.
-              - For MAC ACL: MAC address in HHHH.HHHH.HHHH format.
-              - For Standard ACL: always 'any' (implicit).
+              - For MAC ACL, MAC address in HHHH.HHHH.HHHH format.
+              - For Standard ACL, always 'any' (implicit).
             type: str
             default: 'any'
           remark:
@@ -102,8 +102,10 @@ options:
       - C(merged) - Creates or updates ACLs as specified.
       - C(replaced) - Replaces existing ACL configuration with specified config.
       - C(deleted) - Deletes ACLs specified in config.
+      - C(gathered) - Gathers ACL state without changing the device.
+      - C(rendered) - Renders CLI commands without connecting to the device.
     type: str
-    choices: ['merged', 'replaced', 'deleted']
+    choices: ['merged', 'replaced', 'deleted', 'gathered', 'rendered']
     default: merged
 author: clemon
 """
@@ -210,21 +212,13 @@ commands:
 """
 
 from ansible.module_utils.basic import AnsibleModule
+from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.acls import AclsFacts
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config
 from typing import Any
 
 AclRule = dict[str, Any]
 AclConfig = dict[str, Any]
 RuleKey = tuple[Any, Any, Any, Any]
-
-try:
-    from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.acls import (
-        AclsFacts,
-    )
-    HAS_FACTS = True
-except ImportError:
-    HAS_FACTS = False
-
 
 # Valid ACL ID ranges
 STANDARD_ACL_RANGE = (1, 999)
@@ -515,7 +509,7 @@ def main() -> None:
         ),
         state=dict(
             type='str',
-            choices=['merged', 'replaced', 'deleted'],
+            choices=['merged', 'replaced', 'deleted', 'gathered', 'rendered'],
             default='merged',
         ),
     )
@@ -543,9 +537,9 @@ def main() -> None:
         if not is_valid:
             module.fail_json(msg=error_msg)
 
-    if not HAS_FACTS:
-        module.fail_json(msg='ACL facts support is required for diffing')
-        return
+    if state == 'rendered':
+        commands = build_acl_commands(config, [])
+        module.exit_json(changed=False, commands=commands, rendered=commands)
 
     try:
         facts = AclsFacts(module)
@@ -555,6 +549,9 @@ def main() -> None:
         return
 
     result['before'] = existing_acls
+
+    if state == 'gathered':
+        module.exit_json(changed=False, gathered=existing_acls)
 
     # Generate commands based on state
     if state == 'merged':

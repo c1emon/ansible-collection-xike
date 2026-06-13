@@ -20,3 +20,6 @@ dev = [
 netmiko-reference = [
     "netmiko>=4.7.0",
 ]
+
+[tool.ruff.lint]
+ignore = ["E402"]

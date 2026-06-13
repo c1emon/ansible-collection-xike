@@ -169,7 +169,7 @@ Specialty/future maturity targets:
 - `xikeos_eaps`
 - `xikeos_port_isolate`
 - `xikeos_flex_monitor_link`
-- `xikeos_ospfv2`
+- `xikeos_ospf_v2`
 
 P1 core state expectations:
 

@@ -123,3 +123,24 @@ def test_resource_lifecycle_gathered_rendered_and_unsupported_states():
     with pytest.raises(ExitJson):
         run_resource_module_lifecycle(unsupported, [], "parsed", _gather, _build_commands, _build_after)
     assert "unsupported" in unsupported.fail_json.call_args.kwargs["msg"]
+
+
+def test_resource_lifecycle_rendered_does_not_gather_or_apply():
+    module = fake_module({"before": [{"name": "live"}]})
+    gather = Mock(side_effect=AssertionError("rendered must not gather current state"))
+    apply_config = Mock()
+
+    with pytest.raises(ExitJson):
+        run_resource_module_lifecycle(
+            module,
+            [{"name": "planned"}],
+            "rendered",
+            gather,
+            _build_commands,
+            _build_after,
+            apply_config=apply_config,
+        )
+
+    assert module.exit_json.call_args.kwargs["rendered"] == ["render planned"]
+    gather.assert_not_called()
+    apply_config.assert_not_called()

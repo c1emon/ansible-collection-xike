@@ -43,8 +43,9 @@ options:
       - C(replaced) - Replaces existing VLAN configuration with specified config.
       - C(deleted) - Deletes VLANs specified in config.
       - C(gathered) - Gathers VLAN state without changing the device.
+      - C(rendered) - Renders CLI commands without connecting to the device.
     type: str
-    choices: ['merged', 'replaced', 'deleted', 'gathered']
+    choices: ['merged', 'replaced', 'deleted', 'gathered', 'rendered']
     default: merged
 author: clemon
 """
@@ -161,11 +162,14 @@ def get_commands(config: list[dict[str, Any]], state: str, current: Optional[lis
 
     if state == "merged":
         for vlan in config:
+            requested_name = vlan.get("name")
             vlan = _normalize_vlan(vlan)
             vlan_id = vlan["vlan_id"]
-            name = vlan.get("name", "")
+            name = requested_name or ""
             existing = current_by_id.get(vlan_id)
-            if existing and existing.get("name", "") == name and existing.get("state", "active") == vlan.get("state", "active"):
+            name_matches = True if not name else existing and existing.get("name", "") == name
+            state_matches = existing and existing.get("state", "active") == vlan.get("state", "active")
+            if existing and name_matches and state_matches:
                 continue
 
             commands.append(f"vlan {vlan_id}")
@@ -179,11 +183,14 @@ def get_commands(config: list[dict[str, Any]], state: str, current: Optional[lis
             if vlan_id != 1:
                 commands.append(f"no vlan {vlan_id}")
         for vlan in config:
+            requested_name = vlan.get("name")
             vlan = _normalize_vlan(vlan)
             vlan_id = vlan["vlan_id"]
-            name = vlan.get("name", "")
+            name = requested_name or ""
             existing = current_by_id.get(vlan_id)
-            if existing and existing.get("name", "") == name and existing.get("state", "active") == vlan.get("state", "active"):
+            name_matches = True if not name else existing and existing.get("name", "") == name
+            state_matches = existing and existing.get("state", "active") == vlan.get("state", "active")
+            if existing and name_matches and state_matches:
                 continue
             commands.append(f"vlan {vlan_id}")
             if name:
@@ -243,6 +250,8 @@ def build_after_state(before: list[dict[str, Any]], desired: list[dict[str, Any]
             after = {vlan_id: vlan for vlan_id, vlan in after.items() if vlan_id in desired_ids or vlan_id == 1}
         for vlan in desired:
             normalized = _normalize_vlan(vlan)
+            if not vlan.get("name") and normalized["vlan_id"] in after:
+                normalized["name"] = after[normalized["vlan_id"]].get("name", "")
             after[normalized["vlan_id"]] = normalized
     elif state == "deleted":
         for vlan in desired:
@@ -264,7 +273,7 @@ def main() -> None:
                 name=dict(
                     type="str",
                     required=False,
-                    default="",
+                    default=None,
                 ),
                 state=dict(
                     type="str",
@@ -275,7 +284,7 @@ def main() -> None:
         ),
         state=dict(
             type="str",
-            choices=["merged", "replaced", "deleted", "gathered"],
+            choices=["merged", "replaced", "deleted", "gathered", "rendered"],
             default="merged",
         ),
         _textfsm_templates=dict(
@@ -303,7 +312,7 @@ def main() -> None:
         build_after=build_after_state,
         mutating_states=("merged", "replaced", "deleted"),
         gathered_states=("gathered",),
-        rendered_states=(),
+        rendered_states=("rendered",),
         apply_config=load_config,
     )
 

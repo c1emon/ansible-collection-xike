@@ -20,7 +20,7 @@ from ansible_collections.c1emon.xikeos.plugins.modules.xikeos_l3_interfaces impo
 from ansible_collections.c1emon.xikeos.plugins.modules.xikeos_lag_interfaces import (
     build_trunk_commands,
 )
-from ansible_collections.c1emon.xikeos.plugins.modules.xikeos_ospfv2 import (
+from ansible_collections.c1emon.xikeos.plugins.modules.xikeos_ospf_v2 import (
     build_commands as ospf_build_commands,
     build_delete_commands as ospf_build_delete_commands,
 )

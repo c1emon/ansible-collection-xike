@@ -105,6 +105,7 @@ commands:
 """
 
 from ansible.module_utils.basic import AnsibleModule
+from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.l3_interfaces import L3InterfacesFacts
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import run_resource_module_lifecycle
 from typing import TYPE_CHECKING, Any
@@ -114,15 +115,6 @@ if TYPE_CHECKING:
 
 L3InterfaceConfig = dict[str, Any]
 L3InterfaceState = dict[str, L3InterfaceConfig]
-
-try:
-    from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.l3_interfaces import (
-        L3InterfacesFacts,
-    )
-    HAS_FACTS = True
-except ImportError:
-    HAS_FACTS = False
-
 
 def build_commands(config: L3InterfaceConfig, existing_config: L3InterfaceState) -> list[str]:
     """Build CLI commands for a single interface config entry.
@@ -213,9 +205,6 @@ def build_after_state(
 
 def gather_l3_interfaces(module: "AnsibleModuleType") -> L3InterfaceState:
     """Gather L3 interface facts required for idempotent diffing."""
-    if not HAS_FACTS:
-        module.fail_json(msg='L3 interface facts support is required for diffing')
-        return {}
     try:
         return L3InterfacesFacts(module).get_facts()
     except Exception as exc:
@@ -251,7 +240,7 @@ def main() -> None:
             state=dict(
                 type='str',
                 default='merged',
-                choices=['merged', 'replaced'],
+                choices=['merged', 'replaced', 'gathered', 'rendered'],
             ),
         ),
         supports_check_mode=True,
@@ -268,7 +257,9 @@ def main() -> None:
         build_commands=build_lifecycle_commands,
         build_after=build_after_state,
         mutating_states=('merged', 'replaced'),
-        rendered_states=(),
+        gathered_states=('gathered',),
+        rendered_states=('rendered',),
+        rendered_current={},
         apply_config=load_config,
         gather_after_apply=True,
     )

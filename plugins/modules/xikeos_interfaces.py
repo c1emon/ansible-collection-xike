@@ -214,7 +214,7 @@ def main() -> None:
             ),
             state=dict(
                 type='str',
-                choices=['merged', 'replaced'],
+                choices=['merged', 'replaced', 'gathered', 'rendered'],
                 default='merged',
             ),
         ),
@@ -231,7 +231,9 @@ def main() -> None:
         build_commands=build_commands,
         build_after=build_after_state,
         mutating_states=('merged', 'replaced'),
-        rendered_states=(),
+        gathered_states=('gathered',),
+        rendered_states=('rendered',),
+        rendered_current={},
         apply_config=load_config,
         gather_after_apply=True,
     )

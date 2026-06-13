@@ -113,6 +113,7 @@ commands:
 """
 
 from ansible.module_utils.basic import AnsibleModule
+from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.l2_interfaces import L2InterfacesFacts
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import run_resource_module_lifecycle
 from typing import TYPE_CHECKING, Any
@@ -122,13 +123,6 @@ if TYPE_CHECKING:
 
 L2InterfaceConfig = dict[str, Any]
 L2InterfaceState = dict[str, L2InterfaceConfig]
-
-try:
-    from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.l2_interfaces import L2InterfacesFacts
-    HAS_FACTS = True
-except ImportError:
-    HAS_FACTS = False
-
 
 def parse_vlan_str(vlan_str: object) -> str | None:
     """Parse VLAN string like '10,20,30' or 'all' into a normalized format."""
@@ -238,9 +232,6 @@ def build_after_state(
 
 def gather_l2_interfaces(module: "AnsibleModuleType") -> L2InterfaceState:
     """Gather L2 interface facts required for idempotent diffing."""
-    if not HAS_FACTS:
-        module.fail_json(msg='L2 interface facts support is required for diffing')
-        return {}
     try:
         return L2InterfacesFacts(module).get_facts()
     except Exception as exc:
@@ -267,7 +258,7 @@ def main() -> None:
             state=dict(
                 type='str',
                 default='merged',
-                choices=['merged', 'replaced'],
+                choices=['merged', 'replaced', 'gathered', 'rendered'],
             ),
         ),
         supports_check_mode=True,
@@ -283,7 +274,9 @@ def main() -> None:
         build_commands=build_lifecycle_commands,
         build_after=build_after_state,
         mutating_states=('merged', 'replaced'),
-        rendered_states=(),
+        gathered_states=('gathered',),
+        rendered_states=('rendered',),
+        rendered_current={},
         apply_config=load_config,
         gather_after_apply=True,
     )

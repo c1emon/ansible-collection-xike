@@ -21,12 +21,13 @@ from ansible_collections.c1emon.xikeos.plugins.modules import (
     xikeos_eaps as eaps_module,
     xikeos_erps as erps_module,
     xikeos_flex_monitor_link as flex_monitor_link_module,
+    xikeos_facts as facts_module,
     xikeos_interfaces as interfaces_module,
     xikeos_l2_interfaces as l2_interfaces_module,
     xikeos_l3_interfaces as l3_interfaces_module,
     xikeos_lag_interfaces as lag_interfaces_module,
     xikeos_mirror as mirror_module,
-    xikeos_ospfv2 as ospfv2_module,
+    xikeos_ospf_v2 as ospf_v2_module,
     xikeos_port_isolate as port_isolate_module,
     xikeos_qinq as qinq_module,
     xikeos_static_routes as static_routes_module,
@@ -34,6 +35,7 @@ from ansible_collections.c1emon.xikeos.plugins.modules import (
     xikeos_vlans as vlans_module,
 )
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos import xikeos as network_utils
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos import safety as safety_utils
 from ansible_collections.c1emon.xikeos.plugins.terminal.xikeos import TerminalModule
 
 from .lifecycle_helpers import ExitJson, fake_module
@@ -54,7 +56,7 @@ RESOURCE_MODULE_NAMES = {
     "xikeos_l3_interfaces.py",
     "xikeos_lag_interfaces.py",
     "xikeos_mirror.py",
-    "xikeos_ospfv2.py",
+    "xikeos_ospf_v2.py",
     "xikeos_port_isolate.py",
     "xikeos_qinq.py",
     "xikeos_static_routes.py",
@@ -198,6 +200,111 @@ def test_xikeos_command_stdout_and_lines():
     assert result["changed"] is False
 
 
+def test_xikeos_command_blocks_mutating_commands_by_default():
+    module = _fake_module({"commands": ["reload"], "wait_for": [], "match": "all", "retries": 1, "interval": 0})
+    module.fail_json.side_effect = ExitJson
+    with patch.object(command_module, "AnsibleModule", return_value=module), patch.object(command_module, "run_commands") as run_mock:
+        with pytest.raises(ExitJson):
+            command_module.main()
+
+    run_mock.assert_not_called()
+    assert "blocked" in module.fail_json.call_args.kwargs["msg"]
+    assert module.fail_json.call_args.kwargs["commands"] == ["reload"]
+
+
+def test_xikeos_command_unsafe_override_warns_and_waits():
+    module = _fake_module(
+        {
+            "commands": ["reload"],
+            "unsafe_allow_mutating_commands": True,
+            "wait_for": ["result[0] contains ready"],
+            "match": "all",
+            "retries": 2,
+            "interval": 0,
+        }
+    )
+    module.warn = Mock()
+    with patch.object(command_module, "AnsibleModule", return_value=module), patch.object(
+        command_module, "run_commands", side_effect=[["not yet"], ["ready"]]
+    ):
+        with pytest.raises(ExitJson):
+            command_module.main()
+
+    module.warn.assert_called_once()
+    assert module.exit_json.call_args.kwargs["changed"] is True
+    assert module.exit_json.call_args.kwargs["stdout"] == ["ready"]
+
+
+def test_redaction_preserves_context_and_hides_secret_values():
+    output = "username admin password supersecret\nsnmp-server community public RO\ninterface ethernet 1/0/1"
+    redacted = safety_utils.redact_text(output)
+    assert "supersecret" not in redacted
+    assert "public" not in redacted
+    assert safety_utils.REDACTION_MARKER in redacted
+    assert "interface ethernet 1/0/1" in redacted
+
+
+def test_xikeos_facts_minimum_device_facts():
+    module = _fake_module({"gather_subset": ["min"], "gather_network_resources": []})
+    version_output = "Hostname: core-switch\nSoftware version: V300SP10240912\nModel: SKS8300\nSerial number: SN123"
+    with patch.object(facts_module, "AnsibleModule", return_value=module), patch.object(
+        facts_module, "run_commands", return_value=[version_output]
+    ):
+        with pytest.raises(ExitJson):
+            facts_module.main()
+
+    facts = module.exit_json.call_args.kwargs["ansible_facts"]
+    assert facts["ansible_net_hostname"] == "core-switch"
+    assert facts["ansible_net_model"] == "SKS8300"
+    assert facts["ansible_net_version"] == "V300SP10240912"
+    assert facts["ansible_net_serialnum"] == "SN123"
+    assert facts["ansible_net_api"] == "cliconf"
+    assert facts["ansible_net_gather_subset"] == ["min"]
+    assert facts["ansible_net_gather_network_resources"] == []
+    assert "ansible_network_resources" not in facts
+
+
+def test_xikeos_facts_gathers_resource_facts_under_ansible_network_resources():
+    module = _fake_module({"gather_subset": ["min"], "gather_network_resources": ["vlans", "interfaces"]})
+    with patch.object(facts_module, "AnsibleModule", return_value=module), patch.object(
+        facts_module, "run_commands", return_value=["Hostname: core"]
+    ), patch.object(facts_module, "gather_vlans", return_value=[{"vlan_id": 10, "name": "DATA", "state": "active"}]), patch.object(
+        facts_module, "gather_interfaces", return_value={"ethernet 1/0/1": {"description": "uplink", "enabled": True}}
+    ):
+        with pytest.raises(ExitJson):
+            facts_module.main()
+
+    facts = module.exit_json.call_args.kwargs["ansible_facts"]
+    assert facts["ansible_net_gather_network_resources"] == ["vlans", "interfaces"]
+    assert facts["ansible_network_resources"]["vlans"] == [{"vlan_id": 10, "name": "DATA", "state": "active"}]
+    assert facts["ansible_network_resources"]["interfaces"] == [
+        {"name": "ethernet 1/0/1", "description": "uplink", "enabled": True}
+    ]
+
+
+def test_xikeos_facts_golden_sks8300_resource_shapes_are_config_compatible():
+    module = _fake_module({"gather_subset": ["min"], "gather_network_resources": ["vlans", "l2_interfaces", "l3_interfaces"]})
+    version_output = "Hostname: sks8300-a\nSoftware version: V300SP10240912\nModel: SKS8300"
+    vlan_facts = [{"vlan_id": 10, "name": "servers", "state": "active"}]
+    l2_facts = {"ethernet 1/0/1": {"mode": "access", "access_vlan": 10, "pvid": 10}}
+    l3_facts = {"vlan-interface 10": {"ipv4": [{"address": "192.0.2.1", "subnet_mask": "255.255.255.0"}], "ipv6": []}}
+
+    with patch.object(facts_module, "AnsibleModule", return_value=module), patch.object(
+        facts_module, "run_commands", return_value=[version_output]
+    ), patch.object(facts_module, "gather_vlans", return_value=vlan_facts), patch.object(
+        facts_module, "gather_l2_interfaces", return_value=l2_facts
+    ), patch.object(facts_module, "gather_l3_interfaces", return_value=l3_facts):
+        with pytest.raises(ExitJson):
+            facts_module.main()
+
+    resources = module.exit_json.call_args.kwargs["ansible_facts"]["ansible_network_resources"]
+    assert resources["vlans"] == [{"vlan_id": 10, "name": "servers", "state": "active"}]
+    assert resources["l2_interfaces"] == [{"name": "ethernet 1/0/1", "mode": "access", "access_vlan": 10, "pvid": 10}]
+    assert resources["l3_interfaces"] == [
+        {"name": "vlan-interface 10", "ipv4": [{"address": "192.0.2.1", "subnet_mask": "255.255.255.0"}], "ipv6": []}
+    ]
+
+
 def test_xikeos_config_check_mode_and_save_flow():
     check_module = _fake_module({"lines": ["vlan 10"], "save": True}, check_mode=True)
     with patch.object(config_module, "AnsibleModule", return_value=check_module), patch.object(
@@ -269,6 +376,21 @@ def test_xikeos_vlans_normalize_and_lifecycle():
         "after": current,
     }
     gather_mock.assert_called_once_with(unchanged)
+    load_mock.assert_not_called()
+
+    omitted_name = _fake_module({"config": [{"vlan_id": 100, "state": "active"}], "state": "merged"})
+    with patch.object(vlans_module, "AnsibleModule", return_value=omitted_name), patch.object(
+        vlans_module, "gather_vlans", return_value=current
+    ), patch.object(vlans_module, "load_config") as load_mock:
+        with pytest.raises(ExitJson):
+            vlans_module.main()
+
+    assert omitted_name.exit_json.call_args.kwargs == {
+        "changed": False,
+        "commands": [],
+        "before": current,
+        "after": current,
+    }
     load_mock.assert_not_called()
 
     changed = _fake_module({"config": [{"vlan_id": 100, "name": "VOICE", "state": "active"}], "state": "merged"})
@@ -394,6 +516,50 @@ def test_static_routes_lifecycle_uses_network_apply_and_check_mode_computes_diff
 
     assert module.exit_json.call_args.kwargs["after"] == desired
     load_mock.assert_called_once_with(module, ["ip route 192.168.2.0 255.255.255.0 10.0.0.1"])
+
+
+def test_static_routes_infers_ipv6_route_type_when_omitted():
+    route = {"destination": "2001:db8::", "mask": "32", "next_hop": "2001:db8::1"}
+
+    assert static_routes_module.normalize_route(route)["route_type"] == "ipv6"
+    assert static_routes_module.route_key(route) == ("2001:db8::", "32", "ipv6")
+    assert static_routes_module.build_static_route_commands([route], []) == ["ipv6 route 2001:db8::/32 2001:db8::1"]
+
+
+def test_static_routes_infers_ipv4_route_type_when_omitted():
+    route = {"destination": "192.0.2.0", "mask": "24", "next_hop": "192.0.2.1"}
+
+    assert static_routes_module.normalize_route(route)["route_type"] == "ipv4"
+    assert static_routes_module.route_key(route) == ("192.0.2.0", "255.255.255.0", "ipv4")
+    assert static_routes_module.build_static_route_commands([route], []) == ["ip route 192.0.2.0 255.255.255.0 192.0.2.1"]
+
+
+def test_static_routes_rendered_does_not_gather_or_apply():
+    route = {"destination": "192.0.2.0", "mask": "24", "next_hop": "192.0.2.1"}
+    module = _fake_module({"config": [route], "state": "rendered"})
+    with patch.object(static_routes_module, "AnsibleModule", return_value=module), patch.object(
+        static_routes_module, "StaticRoutesFacts"
+    ) as facts_mock, patch.object(static_routes_module, "load_config") as load_mock:
+        with pytest.raises(ExitJson):
+            static_routes_module.main()
+
+    assert module.exit_json.call_args.kwargs["changed"] is False
+    assert module.exit_json.call_args.kwargs["rendered"] == ["ip route 192.0.2.0 255.255.255.0 192.0.2.1"]
+    facts_mock.assert_not_called()
+    load_mock.assert_not_called()
+
+
+def test_static_routes_gathered_returns_gathered_key():
+    existing = [{"destination": "192.0.2.0", "mask": "255.255.255.0", "next_hop": "192.0.2.1", "distance": 1, "route_type": "ipv4"}]
+    module = _fake_module({"config": [], "state": "gathered"})
+    with patch.object(static_routes_module, "AnsibleModule", return_value=module), patch.object(
+        static_routes_module, "StaticRoutesFacts"
+    ) as facts_mock:
+        facts_mock.return_value.facts = {"static_routes": existing}
+        with pytest.raises(ExitJson):
+            static_routes_module.main()
+
+    assert module.exit_json.call_args.kwargs == {"changed": False, "gathered": existing}
 
 
 def test_static_routes_facts_failure_is_explicit():
@@ -559,7 +725,7 @@ def test_interface_family_lifecycle(module_under_test, facts_attr, facts_class, 
             {"config": {"flex_links": [{"group_id": 1, "master_port": {"type": "eth", "id": "0/0/1"}}]}, "state": "merged"},
         ),
         (
-            ospfv2_module,
+            ospf_v2_module,
             {"config": {"process_id": 1, "router_id": "1.1.1.1"}, "state": "rendered"},
             {"config": {"process_id": 1, "router_id": "1.1.1.1"}, "state": "merged"},
         ),

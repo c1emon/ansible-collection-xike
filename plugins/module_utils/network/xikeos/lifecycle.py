@@ -24,6 +24,7 @@ def run_resource_module_lifecycle(
     gathered_states: tuple[str, ...] = ("gathered",),
     rendered_states: tuple[str, ...] = ("rendered",),
     rendered_key: str = "rendered",
+    rendered_current: Any = None,
     apply_config: Callable[["AnsibleModule", list[str]], Any] = load_config,
     gather_after_apply: bool = False,
 ) -> None:
@@ -70,15 +71,15 @@ def run_resource_module_lifecycle(
         "after": [],
     }
 
+    if state in rendered_states:
+        commands = build_commands(config, state, [] if rendered_current is None else rendered_current)
+        module.exit_json(changed=False, commands=commands, **{rendered_key: commands})
+
     before = gather(module)
     result["before"] = before
 
     if state in gathered_states:
         module.exit_json(changed=False, gathered=before)
-
-    if state in rendered_states:
-        commands = build_commands(config, state, before)
-        module.exit_json(changed=False, commands=commands, **{rendered_key: commands})
 
     if state not in mutating_states:
         module.fail_json(msg="unsupported resource module state: {0}".format(state))

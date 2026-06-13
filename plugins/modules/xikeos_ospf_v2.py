@@ -9,7 +9,7 @@ __metaclass__ = type
 from typing import Any, Mapping, Optional, Sequence
 
 DOCUMENTATION = """
-module: xikeos_ospfv2
+module: xikeos_ospf_v2
 short_description: Manage OSPFv2 routing protocol on Xike switches
 version_added: "0.1.0"
 description:
@@ -77,10 +77,11 @@ options:
         type: int
         choices: [1, 2]
       passive_interfaces:
-        description: List of interfaces to make passive (suppress hello packets)
+        description:
+          - List of interfaces to make passive and suppress hello packets.
+          - Use interface names such as C(vlan-interface 10), or C(default) for all.
         type: list
         elements: str
-        description: Interface names (e.g., 'vlan-interface 10') or 'default' for all
   state:
     description: Desired state of the configuration
     type: str
@@ -91,7 +92,7 @@ author: clemon
 
 EXAMPLES = """
 - name: Configure OSPFv2 with network statements
-  c1emon.xikeos.xikeos_ospfv2:
+  c1emon.xikeos.xikeos_ospf_v2:
     config:
       process_id: 1
       router_id: 1.1.1.1
@@ -105,7 +106,7 @@ EXAMPLES = """
     state: merged
 
 - name: Configure OSPFv2 with redistribution
-  c1emon.xikeos.xikeos_ospfv2:
+  c1emon.xikeos.xikeos_ospf_v2:
     config:
       process_id: 1
       router_id: 1.1.1.1
@@ -121,7 +122,7 @@ EXAMPLES = """
     state: merged
 
 - name: Configure OSPFv2 with default-information originate
-  c1emon.xikeos.xikeos_ospfv2:
+  c1emon.xikeos.xikeos_ospf_v2:
     config:
       process_id: 1
       router_id: 1.1.1.1
@@ -132,7 +133,7 @@ EXAMPLES = """
     state: merged
 
 - name: Configure OSPFv2 with passive interfaces
-  c1emon.xikeos.xikeos_ospfv2:
+  c1emon.xikeos.xikeos_ospf_v2:
     config:
       process_id: 1
       router_id: 1.1.1.1
@@ -146,7 +147,7 @@ EXAMPLES = """
     state: merged
 
 - name: Replace entire OSPFv2 configuration
-  c1emon.xikeos.xikeos_ospfv2:
+  c1emon.xikeos.xikeos_ospf_v2:
     config:
       process_id: 1
       router_id: 2.2.2.2
@@ -195,16 +196,8 @@ commands:
 """
 
 from ansible.module_utils.basic import AnsibleModule
+from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.ospfv2 import Ospfv2Facts
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import exit_rendered_or_fail
-
-try:
-    from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.ospfv2 import (
-        Ospfv2Facts,
-    )
-    HAS_FACTS = True
-except ImportError:
-    HAS_FACTS = False
-
 
 def _normalize_config(config: Optional[Mapping[str, Any]]) -> dict[str, Any]:
     """Normalize config and canonicalize OSPF network area values."""
@@ -471,7 +464,7 @@ def main() -> None:
     if state == 'rendered':
         exit_rendered_or_fail(
             module,
-            'xikeos_ospfv2',
+            'xikeos_ospf_v2',
             config,
             state,
             lambda cfg, _state: build_commands(cfg, {'processes': {}}),
@@ -480,18 +473,15 @@ def main() -> None:
     elif config is not None:
         module.fail_json(
             msg=(
-                'xikeos_ospfv2 supports state=rendered only until lifecycle-safe gather, diff, '
+                'xikeos_ospf_v2 supports state=rendered only until lifecycle-safe gather, diff, '
                 'and load_config apply support is implemented; state={0} is unsupported'
             ).format(state)
         )
         return
 
     # Gather existing facts
-    if HAS_FACTS:
-        facts = Ospfv2Facts(module)
-        existing_config = facts.facts
-    else:
-        existing_config = {'processes': {}}
+    facts = Ospfv2Facts(module)
+    existing_config = facts.facts
 
     result = {
         'changed': False,
@@ -544,7 +534,7 @@ def main() -> None:
     result['changed'] = bool(deduped)
 
     # Refresh facts for 'after'
-    if HAS_FACTS and deduped:
+    if deduped:
         facts_after = Ospfv2Facts(module)
         result['after'] = facts_after.facts
     else:

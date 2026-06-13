@@ -100,6 +100,7 @@ commands:
 """
 
 from ansible.module_utils.basic import AnsibleModule
+from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.lag_interfaces import LagInterfacesFacts
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import run_resource_module_lifecycle
 from typing import TYPE_CHECKING, Any
@@ -109,15 +110,6 @@ if TYPE_CHECKING:
 
 LagInterfaceConfig = dict[str, Any]
 LagInterfaceState = dict[str, LagInterfaceConfig]
-
-try:
-    from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.lag_interfaces import (
-        LagInterfacesFacts,
-    )
-    HAS_FACTS = True
-except ImportError:
-    HAS_FACTS = False
-
 
 def _extract_trunk_id(trunk_name: str) -> str:
     """Extract numeric ID from trunk name like 'eth-trunk 1' -> 1."""
@@ -221,9 +213,6 @@ def build_after_state(
 
 def gather_lag_interfaces(module: "AnsibleModuleType") -> LagInterfaceState:
     """Gather LAG interface facts required for idempotent diffing."""
-    if not HAS_FACTS:
-        module.fail_json(msg='LAG interface facts support is required for diffing')
-        return {}
     try:
         return LagInterfacesFacts(module).get_facts()
     except Exception as exc:
@@ -251,7 +240,7 @@ def main() -> None:
             state=dict(
                 type='str',
                 default='merged',
-                choices=['merged', 'replaced'],
+                choices=['merged', 'replaced', 'gathered', 'rendered'],
             ),
         ),
         supports_check_mode=True,
@@ -268,7 +257,9 @@ def main() -> None:
         build_commands=build_lifecycle_commands,
         build_after=build_after_state,
         mutating_states=('merged', 'replaced'),
-        rendered_states=(),
+        gathered_states=('gathered',),
+        rendered_states=('rendered',),
+        rendered_current={},
         apply_config=load_config,
         gather_after_apply=True,
     )
