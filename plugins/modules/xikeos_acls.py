@@ -213,9 +213,9 @@ commands:
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.acls import AclsFacts
-from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.errors import XikeOSError
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import gather_with_error_boundary
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import run_resource_module_lifecycle
 from typing import Any
 
 AclRule = dict[str, Any]
@@ -456,6 +456,32 @@ def build_after_state(
     return [after_by_id[acl_id] for acl_id in sorted(after_by_id)]
 
 
+def build_lifecycle_commands(
+    config: list[AclConfig],
+    state: str,
+    existing_acls: list[AclConfig],
+) -> list[str]:
+    """Build commands for lifecycle execution."""
+    if state in ('merged', 'rendered'):
+        return build_acl_commands(config, existing_acls)
+    if state == 'replaced':
+        return build_replaced_commands(config, existing_acls)
+    if state == 'deleted':
+        return build_delete_commands(config, existing_acls)
+    return []
+
+
+def gather_acls(module):
+    """Gather ACL facts with the shared error boundary."""
+    return gather_with_error_boundary(
+        module,
+        lambda: AclsFacts(module).facts.get('acls', []),
+        'failed to gather ACL facts',
+        'acls',
+        [],
+    )
+
+
 def main() -> None:
     """Main entry point for the module."""
     module_args = dict(
@@ -523,13 +549,6 @@ def main() -> None:
     config = module.params.get('config', []) or []
     state = module.params.get('state', 'merged')
 
-    result = {
-        'changed': False,
-        'commands': [],
-        'before': [],
-        'after': [],
-    }
-
     # Validate ACL IDs
     for acl_config in config:
         acl_id = acl_config['acl_id']
@@ -537,62 +556,20 @@ def main() -> None:
         is_valid, error_msg = validate_acl_id(acl_id, acl_type)
         if not is_valid:
             module.fail_json(msg=error_msg)
-
-    if state == 'rendered':
-        commands = build_acl_commands(config, [])
-        module.exit_json(changed=False, commands=commands, rendered=commands)
-
-    existing_acls = gather_with_error_boundary(
-        module,
-        lambda: AclsFacts(module).facts.get('acls', []),
-        'failed to gather ACL facts',
-        'acls',
-        [],
+    run_resource_module_lifecycle(
+        module=module,
+        config=config,
+        state=state,
+        gather=gather_acls,
+        build_commands=build_lifecycle_commands,
+        build_after=build_after_state,
+        mutating_states=('merged', 'replaced', 'deleted'),
+        gathered_states=('gathered',),
+        rendered_states=('rendered',),
+        rendered_current=[],
+        apply_config=load_config,
+        gather_after_apply=True,
     )
-
-    result['before'] = existing_acls
-
-    if state == 'gathered':
-        module.exit_json(changed=False, gathered=existing_acls)
-
-    # Generate commands based on state
-    if state == 'merged':
-        commands = build_acl_commands(config, existing_acls)
-    elif state == 'replaced':
-        commands = build_replaced_commands(config, existing_acls)
-    elif state == 'deleted':
-        commands = build_delete_commands(config, existing_acls)
-    else:
-        commands = []
-
-    result['commands'] = commands
-    result['changed'] = bool(commands)
-    result['after'] = build_after_state(existing_acls, config, state) if commands else existing_acls
-
-    if module.check_mode:
-        module.exit_json(**result)
-
-    if commands:
-        try:
-            load_config(module, commands)
-        except XikeOSError as exc:
-            module.fail_json(msg='failed to apply ACL configuration', changed=True, commands=commands, before=existing_acls, after=result['after'], error=str(exc), detail=getattr(exc, 'detail', None), context=getattr(exc, 'context', 'acls'))
-            return
-        result['after'] = gather_with_error_boundary(
-            module,
-            lambda: AclsFacts(module).facts.get('acls', []),
-            'failed to gather ACL facts after apply',
-            'acls',
-            result['after'],
-            {
-                'changed': True,
-                'commands': commands,
-                'before': existing_acls,
-                'after': result['after'],
-            },
-        )
-
-    module.exit_json(**result)
 
 
 if __name__ == '__main__':

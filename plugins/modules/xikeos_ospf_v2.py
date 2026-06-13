@@ -197,7 +197,10 @@ commands:
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.ospfv2 import Ospfv2Facts
-from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import exit_rendered_or_fail
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import (
+    exit_rendered_or_fail,
+    gather_with_error_boundary,
+)
 
 def _normalize_config(config: Optional[Mapping[str, Any]]) -> dict[str, Any]:
     """Normalize config and canonicalize OSPF network area values."""
@@ -477,8 +480,13 @@ def main() -> None:
         return
 
     # Gather existing facts
-    facts = Ospfv2Facts(module)
-    existing_config = facts.facts
+    existing_config = gather_with_error_boundary(
+        module,
+        lambda: Ospfv2Facts(module).facts,
+        'failed to gather OSPFv2 facts',
+        'ospf_v2',
+        {},
+    )
 
     result = {
         'changed': False,
@@ -532,8 +540,13 @@ def main() -> None:
 
     # Refresh facts for 'after'
     if deduped:
-        facts_after = Ospfv2Facts(module)
-        result['after'] = facts_after.facts
+        result['after'] = gather_with_error_boundary(
+            module,
+            lambda: Ospfv2Facts(module).facts,
+            'failed to gather OSPFv2 facts after apply',
+            'ospf_v2',
+            existing_config,
+        )
     else:
         result['after'] = existing_config
 

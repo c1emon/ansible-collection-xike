@@ -143,8 +143,8 @@ def main() -> None:
     stdout = []
     failed_conditions = []
     wait_for = module.params.get('wait_for') or []
-    retries = module.params.get('retries') or 1
-    interval = module.params.get('interval') or 1
+    retries = module.params.get('retries', 10)
+    interval = module.params.get('interval', 1)
     try:
         for attempt in range(retries):
             stdout = run_commands(module, commands, check_rc=True)
