@@ -12,6 +12,14 @@ Declarative Xike OS resource modules SHALL follow a standard lifecycle for mutat
 - **WHEN** a resource module runs in a mutating state and desired state already matches gathered current state
 - **THEN** it MUST return `changed: false`, MUST NOT apply configuration commands, and MUST return `before` and `after` state representing no state transition.
 
+#### Scenario: Apply fails after command execution starts
+- **WHEN** a resource module starts applying configuration commands and the lower-level apply path fails
+- **THEN** it MUST fail with `changed: true`, include the attempted command list, and indicate that device state may be partially changed.
+
+#### Scenario: Post-apply gather fails
+- **WHEN** a resource module successfully applies configuration commands but cannot gather final state
+- **THEN** it MUST fail with `changed: true`, include the attempted command list and safe before/planned context, and indicate that final device state could not be verified.
+
 ### Requirement: Resource modules honor check mode after diff calculation
 Declarative Xike OS resource modules SHALL compute the planned command diff before exiting in check mode and SHALL NOT modify the target device in check mode.
 
@@ -33,6 +41,10 @@ Declarative Xike OS resource modules that require current state for diffing SHAL
 #### Scenario: Required facts parser fails
 - **WHEN** a resource module receives device output but cannot parse the fields required for idempotent diffing
 - **THEN** it MUST fail with parser context and MUST NOT compute a diff against empty current state.
+
+#### Scenario: Facts provider raises typed error
+- **WHEN** a facts provider raises a typed Xike OS facts, parse, command, or connection error during required state gathering
+- **THEN** the resource gather wrapper or lifecycle helper MUST fail with resource-specific gather context and MUST NOT continue with empty current state.
 
 ### Requirement: Incomplete resource modules do not report false mutation
 Resource modules that cannot safely gather, diff, or apply a mutating state SHALL either fail fast for that state or expose an explicitly non-mutating state such as `rendered`.
@@ -110,4 +122,3 @@ Resource states that can remove unmanaged configuration, such as `overridden` or
 #### Scenario: Purged state is not meaningful
 - **WHEN** a resource type cannot safely delete the resource object itself
 - **THEN** the module MUST NOT expose `purged` as a supported state
-
