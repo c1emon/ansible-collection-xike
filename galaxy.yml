@@ -1,6 +1,6 @@
 namespace: c1emon
 name: xikeos
-version: 0.1.0
+version: 0.2.0
 readme: README.md
 description: Ansible Collection for Xike (兮克) switches - Cisco IOS-like CLI
 authors:
