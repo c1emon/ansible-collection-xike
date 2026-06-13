@@ -48,6 +48,29 @@ EXAMPLES = """
     save: true
 """
 
+RETURN = """
+changed:
+  description: Whether configuration lines were applied.
+  type: bool
+  returned: always
+commands:
+  description: Configuration commands executed by the module, including C(write memory) when saved.
+  type: list
+  elements: str
+  returned: always
+saved:
+  description: Whether the running configuration was saved to startup configuration.
+  type: bool
+  returned: always
+response:
+  description: Raw response returned by the configuration application helper.
+  returned: when lines are provided
+msg:
+  description: Informational message returned when nothing needs to be configured.
+  type: str
+  returned: when no lines are provided
+"""
+
 from ansible.module_utils.basic import AnsibleModule
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.errors import XikeOSError
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config, run_commands

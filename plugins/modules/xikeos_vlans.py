@@ -32,7 +32,9 @@ options:
         type: str
         required: false
       state:
-        description: VLAN state (active/suspend)
+        description:
+          - VLAN state (active/suspend).
+          - C(suspend) is accepted in the configuration model, but mutating states C(merged) and C(replaced) do not render suspended VLAN configuration items and will fail if one is requested.
         type: str
         choices: ['active', 'suspend']
         default: active
@@ -83,20 +85,36 @@ EXAMPLES = """
 """
 
 RETURN = """
+changed:
+  description: Whether the module changed the device configuration.
+  returned: always
+  type: bool
 commands:
   description: List of commands sent to the device
-  returned: always
+  returned: when I(state) is C(merged), C(replaced), C(deleted), or C(rendered)
   type: list
   sample:
     - vlan 100
     - description DATA
     - vlan 200
     - description VOICE
+before:
+  description: The configuration prior to the module execution.
+  returned: when I(state) is C(merged), C(replaced), or C(deleted)
+  type: list
+after:
+  description: The configuration after the module execution.
+  returned: when I(state) is C(merged), C(replaced), or C(deleted)
+  type: list
 gathered:
   description: VLAN state gathered from the device when I(state=gathered)
   returned: when state is gathered
   type: list
   elements: dict
+rendered:
+  description: Rendered CLI commands when I(state) is C(rendered).
+  returned: when I(state) is C(rendered)
+  type: list
 """
 
 from ansible.module_utils.basic import AnsibleModule

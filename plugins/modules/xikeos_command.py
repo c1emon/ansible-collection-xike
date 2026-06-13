@@ -15,7 +15,8 @@ short_description: Run commands on Xike switches
 version_added: "0.1.0"
 description:
   - Execute show commands on Xike switches and return output.
-  - Read-only module, never changes device state.
+  - Read-only by default; mutating/destructive commands are blocked unless C(unsafe_allow_mutating_commands=true).
+  - When the unsafe override is enabled and guarded commands are executed, the module may report C(changed=true).
 options:
   commands:
     description: List of commands to execute
@@ -43,7 +44,8 @@ options:
   unsafe_allow_mutating_commands:
     description:
       - Intentionally unsafe override that allows known mutating/destructive commands.
-      - Defaults to false so this module remains read-only by default.
+      - Defaults to false so this module blocks those commands by default.
+      - Enabling this option can cause the module to return C(changed=true).
     type: bool
     default: false
 author: clemon
@@ -59,6 +61,35 @@ EXAMPLES = """
 
 - debug:
     var: result.stdout
+
+- name: Allow a guarded command explicitly
+  c1emon.xikeos.xikeos_command:
+    commands:
+      - write memory
+    unsafe_allow_mutating_commands: true
+  register: saved
+"""
+
+RETURN = """
+changed:
+  description: Whether the module executed guarded mutating/destructive commands.
+  type: bool
+  returned: always
+commands:
+  description: Commands submitted to the device.
+  type: list
+  elements: str
+  returned: always
+stdout:
+  description: Redacted command output, with sensitive values masked.
+  type: list
+  elements: str
+  returned: always
+stdout_lines:
+  description: Redacted command output split into lines, with sensitive values masked.
+  type: list
+  elements: list
+  returned: always
 """
 
 from ansible.module_utils.basic import AnsibleModule

@@ -13,6 +13,12 @@ module: xikeos_flex_monitor_link
 short_description: Manage Flex-Link and Monitor-Link on Xike OS devices
 version_added: "0.1.0"
 description:
+  - This module currently only supports C(state=rendered) to generate CLI
+    commands for Flex-Link and Monitor-Link; it does not connect to or apply
+    configuration on the device.
+  - Mutating lifecycle states such as C(merged), C(replaced), and C(deleted)
+    are present in the argument schema for future support, but they are
+    currently unsupported and fail when configuration is supplied.
   - This module provides declarative management of Flex-Link and Monitor-Link
     configurations on Xike OS devices.
   - Flex-Link provides backup link redundancy without STP.
@@ -101,9 +107,9 @@ options:
   state:
     description:
       - State of the configuration.
-      - C(merged) - Creates or updates Flex-Link/Monitor-Link settings.
-      - C(replaced) - Replaces existing configuration.
-      - C(deleted) - Deletes Flex-Link/Monitor-Link configuration.
+      - C(rendered) - Generates CLI commands only.
+      - C(merged), C(replaced), and C(deleted) are currently unsupported and
+        fail when configuration is supplied.
     type: str
     choices: ['merged', 'replaced', 'deleted', 'rendered']
     default: merged
@@ -111,7 +117,7 @@ author: clemon
 """
 
 EXAMPLES = """
-- name: Configure Flex-Link group
+- name: Render Flex-Link commands for a group
   c1emon.xikeos.xikeos_flex_monitor_link:
     config:
       flex_links:
@@ -123,9 +129,9 @@ EXAMPLES = """
             type: eth
             id: "0/0/2"
           preemption_mode: role
-    state: merged
+    state: rendered
 
-- name: Configure Monitor-Link group
+- name: Render Monitor-Link commands for a group
   c1emon.xikeos.xikeos_flex_monitor_link:
     config:
       monitor_links:
@@ -138,9 +144,9 @@ EXAMPLES = """
               id: "0/0/2"
             - type: eth
               id: "0/0/3"
-    state: merged
+    state: rendered
 
-- name: Configure Flex-Link with eth-trunk ports
+- name: Render Flex-Link commands with eth-trunk ports
   c1emon.xikeos.xikeos_flex_monitor_link:
     config:
       flex_links:
@@ -152,17 +158,21 @@ EXAMPLES = """
             type: eth-trunk
             id: "2"
           preemption_mode: bandwidth
-    state: merged
+    state: rendered
 
-- name: Delete Flex-Link and Monitor-Link configuration
+- name: Render Flex-Link and Monitor-Link commands
   c1emon.xikeos.xikeos_flex_monitor_link:
     config: {}
-    state: deleted
+    state: rendered
 """
 
 RETURN = """
+changed:
+  description: Whether the module changed the device configuration.
+  returned: always
+  type: bool
 commands:
-  description: List of commands sent to the device
+  description: List of commands rendered for the device.
   returned: always
   type: list
   sample:
@@ -170,6 +180,10 @@ commands:
     - master-port eth 0/0/1
     - slave-port eth 0/0/2
     - preemption mode role
+rendered:
+  description: Rendered CLI commands when I(state) is C(rendered).
+  returned: when I(state) is C(rendered)
+  type: list
 """
 
 from ansible.module_utils.basic import AnsibleModule

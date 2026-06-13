@@ -13,8 +13,12 @@ module: xikeos_ospf_v2
 short_description: Manage OSPFv2 routing protocol on Xike switches
 version_added: "0.1.0"
 description:
-  - This module provides declarative management of OSPFv2 routing protocol
-    configurations on Xike (兮克) switches.
+  - This module currently only supports C(state=rendered) to generate CLI
+    commands for OSPFv2; it does not connect to or apply configuration on the
+    device.
+  - Mutating lifecycle states such as C(merged) and C(replaced) are present in
+    the argument schema for future support, but they are currently unsupported
+    and fail when configuration is supplied.
   - Xike uses Cisco IOS-like OSPF commands (router ospf, network, etc.).
 options:
   config:
@@ -83,7 +87,10 @@ options:
         type: list
         elements: str
   state:
-    description: Desired state of the configuration
+    description:
+      - Desired state of the configuration.
+      - C(rendered) generates CLI commands only and does not apply configuration.
+      - C(merged) and C(replaced) are reserved for future support and currently fail when configuration is supplied.
     type: str
     default: merged
     choices: ['merged', 'replaced', 'rendered']
@@ -91,7 +98,7 @@ author: clemon
 """
 
 EXAMPLES = """
-- name: Configure OSPFv2 with network statements
+- name: Render OSPFv2 commands with network statements
   c1emon.xikeos.xikeos_ospf_v2:
     config:
       process_id: 1
@@ -103,9 +110,9 @@ EXAMPLES = """
         - network: 192.168.1.0
           wildcard: 0.0.0.255
           area: "1"
-    state: merged
+    state: rendered
 
-- name: Configure OSPFv2 with redistribution
+- name: Render OSPFv2 commands with redistribution
   c1emon.xikeos.xikeos_ospf_v2:
     config:
       process_id: 1
@@ -119,9 +126,9 @@ EXAMPLES = """
           metric: 10
         - protocol: connected
           route_map: REDIST-CONNECTED
-    state: merged
+    state: rendered
 
-- name: Configure OSPFv2 with default-information originate
+- name: Render OSPFv2 commands with default-information originate
   c1emon.xikeos.xikeos_ospf_v2:
     config:
       process_id: 1
@@ -130,9 +137,9 @@ EXAMPLES = """
       default_info_originate_always: true
       default_info_originate_metric: 100
       default_info_originate_metric_type: 2
-    state: merged
+    state: rendered
 
-- name: Configure OSPFv2 with passive interfaces
+- name: Render OSPFv2 commands with passive interfaces
   c1emon.xikeos.xikeos_ospf_v2:
     config:
       process_id: 1
@@ -144,9 +151,9 @@ EXAMPLES = """
       passive_interfaces:
         - vlan-interface 10
         - vlan-interface 20
-    state: merged
+    state: rendered
 
-- name: Replace entire OSPFv2 configuration
+- name: Render OSPFv2 replace commands
   c1emon.xikeos.xikeos_ospf_v2:
     config:
       process_id: 1
@@ -155,44 +162,26 @@ EXAMPLES = """
         - network: 172.16.0.0
           wildcard: 0.0.255.255
           area: "0"
-    state: replaced
+    state: rendered
 """
 
 RETURN = """
-before:
-  description: The OSPFv2 configuration prior to the module execution
-  returned: when I(state) is C(merged) or C(replaced)
-  type: dict
-  sample:
-    processes:
-      '1':
-        process_id: 1
-        router_id: 1.1.1.1
-        networks:
-          - network: 10.0.0.0
-            wildcard: 0.0.255.255
-            area: "0"
-after:
-  description: The OSPFv2 configuration after the module execution
-  returned: when I(state) is C(merged) or C(replaced)
-  type: dict
-  sample:
-    processes:
-      '1':
-        process_id: 1
-        router_id: 1.1.1.1
-        networks:
-          - network: 10.0.0.0
-            wildcard: 0.0.255.255
-            area: "0"
+changed:
+  description: Whether the module changed the device configuration.
+  returned: always
+  type: bool
 commands:
-  description: The set of commands pushed to the device
+  description: The set of commands rendered for the device.
   returned: always
   type: list
   sample:
     - router ospf 1
     - ospf router-id 1.1.1.1
     - network 10.0.0.0 0.0.255.255 area 0
+rendered:
+  description: Rendered CLI commands when I(state) is C(rendered).
+  returned: when I(state) is C(rendered)
+  type: list
 """
 
 from ansible.module_utils.basic import AnsibleModule

@@ -33,6 +33,8 @@ description:
   - Aggregates Xike OS facts using mainstream Ansible network fact keys.
   - Device/system facts are returned under standard C(ansible_net_*) keys.
   - Resource facts are returned under C(ansible_network_resources).
+notes:
+  - C(_textfsm_templates) is injected internally by the plugin/action chain and is not intended as a user-facing option.
 options:
   gather_subset:
     description: Device/system fact subsets to gather. C(all) expands to C(min) and C(hardware); raw config requires explicit C(config).
@@ -56,6 +58,46 @@ EXAMPLES = """
     gather_network_resources:
       - vlans
       - interfaces
+"""
+
+RETURN = """
+ansible_facts:
+  description: Collected device and resource facts, with sensitive values redacted.
+  returned: always
+  type: dict
+  contains:
+    ansible_net_api:
+      description: Facts backend identifier used by this module.
+      type: str
+    ansible_net_hostname:
+      description: Device hostname, when available.
+      type: str
+    ansible_net_model:
+      description: Device model, when available.
+      type: str
+    ansible_net_version:
+      description: OS version, when available.
+      type: str
+    ansible_net_serialnum:
+      description: Device serial number, when available.
+      type: str
+    ansible_net_image:
+      description: Boot/system image name, when available.
+      type: str
+    ansible_net_config:
+      description: Redacted running configuration, when C(config) is requested.
+      type: str
+    ansible_net_gather_subset:
+      description: Normalized device subset selectors used for the run.
+      type: list
+      elements: str
+    ansible_net_gather_network_resources:
+      description: Normalized resource selectors used for the run.
+      type: list
+      elements: str
+    ansible_network_resources:
+      description: Gathered resource facts keyed by resource name.
+      type: dict
 """
 
 DEVICE_SUBSETS = ("min", "hardware", "config")

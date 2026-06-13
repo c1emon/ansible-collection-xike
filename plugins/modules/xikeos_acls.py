@@ -51,14 +51,14 @@ options:
       rules:
         description:
           - List of ACL rules.
-          - Rules are applied in order (by sequence number or insertion order).
+          - Rules are applied in insertion order.
         type: list
         elements: dict
         suboptions:
           sequence:
             description:
               - Sequence number for the rule (1-65535).
-              - If not specified, rules are numbered automatically (10, 20, 30, ...).
+              - This field is accepted for compatibility, but the current command builder does not use it to generate or sort commands.
             type: int
           action:
             description:
@@ -182,9 +182,13 @@ EXAMPLES = """
 """
 
 RETURN = """
+changed:
+  description: Whether the module changed the device configuration.
+  returned: always
+  type: bool
 before:
   description: The configuration prior to the module execution.
-  returned: when I(state) is C(merged) or C(replaced)
+  returned: when I(state) is C(merged), C(replaced), or C(deleted)
   type: list
   sample:
     - acl_id: 100
@@ -194,7 +198,7 @@ before:
           source: 192.168.0.0 0.0.255.255
 after:
   description: The configuration after the module execution.
-  returned: when I(state) is C(merged) or C(replaced)
+  returned: when I(state) is C(merged), C(replaced), or C(deleted)
   type: list
   sample:
     - acl_id: 100
@@ -204,11 +208,19 @@ after:
           source: 10.0.0.0 0.255.255.255
 commands:
   description: The set of commands pushed to the device.
-  returned: always
+  returned: when I(state) is C(merged), C(replaced), C(deleted), or C(rendered)
   type: list
   sample:
     - access-list 100 permit 192.168.0.0 0.0.255.255
     - access-list 100 deny any
+gathered:
+  description: ACL state gathered from the device when I(state) is C(gathered).
+  returned: when I(state) is C(gathered)
+  type: list
+rendered:
+  description: Rendered CLI commands when I(state) is C(rendered).
+  returned: when I(state) is C(rendered)
+  type: list
 """
 
 from ansible.module_utils.basic import AnsibleModule

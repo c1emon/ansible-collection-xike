@@ -48,10 +48,15 @@ options:
             type: str
             required: true
   state:
-    description: Desired state of the configuration
+    description:
+      - Desired state of the configuration.
+      - C(merged) - Create or update interface config as specified.
+      - C(replaced) - Replace existing interface config with specified config.
+      - C(gathered) - Gather interface state without changing the device.
+      - C(rendered) - Render CLI commands without connecting to the device.
     type: str
     default: merged
-    choices: ['merged', 'replaced']
+    choices: ['merged', 'replaced', 'gathered', 'rendered']
 author: clemon
 """
 
@@ -87,6 +92,10 @@ EXAMPLES = """
 """
 
 RETURN = """
+changed:
+  description: Whether the module changed the device configuration.
+  returned: always
+  type: bool
 before:
   description: The configuration prior to the module execution
   returned: when I(state) is C(merged) or C(replaced)
@@ -97,11 +106,19 @@ after:
   type: dict
 commands:
   description: The set of commands pushed to the device
-  returned: always
+  returned: when I(state) is C(merged), C(replaced), or C(rendered)
   type: list
   sample:
     - interface vlan-interface 100
     - ip address 192.168.100.1 255.255.255.0
+gathered:
+  description: VLAN interface state gathered from the device when I(state) is C(gathered).
+  returned: when I(state) is C(gathered)
+  type: dict
+rendered:
+  description: Rendered CLI commands when I(state) is C(rendered).
+  returned: when I(state) is C(rendered)
+  type: list
 """
 
 from ansible.module_utils.basic import AnsibleModule

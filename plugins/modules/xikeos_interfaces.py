@@ -12,7 +12,7 @@ short_description: Manage Xike switch interfaces
 version_added: "0.1.0"
 description:
   - Configure Ethernet interfaces on Xike switches.
-  - Supports merged and replaced states.
+  - Supports merged, replaced, gathered, and rendered states.
 options:
   config:
     description: List of interface configurations
@@ -42,9 +42,14 @@ options:
         description: MTU size
         type: int
   state:
-    description: Desired state
+    description:
+      - Desired state.
+      - C(merged) - Create or update interface config as specified.
+      - C(replaced) - Replace existing interface config with specified config.
+      - C(gathered) - Gather interface state without changing the device.
+      - C(rendered) - Render CLI commands without connecting to the device.
     type: str
-    choices: ['merged', 'replaced']
+    choices: ['merged', 'replaced', 'gathered', 'rendered']
     default: merged
 author: clemon
 """
@@ -72,9 +77,13 @@ EXAMPLES = """
 """
 
 RETURN = """
+changed:
+  description: Whether the module changed the device configuration.
+  returned: always
+  type: bool
 commands:
   description: CLI commands sent to the device
-  returned: always
+  returned: when I(state) is C(merged), C(replaced), or C(rendered)
   type: list
   sample:
     - interface ethernet 0/0/1
@@ -83,6 +92,22 @@ commands:
     - duplex full
     - mtu 1500
     - no shutdown
+before:
+  description: The configuration prior to the module execution.
+  returned: when I(state) is C(merged) or C(replaced)
+  type: dict
+after:
+  description: The configuration after the module execution.
+  returned: when I(state) is C(merged) or C(replaced)
+  type: dict
+gathered:
+  description: Interface state gathered from the device when I(state) is C(gathered).
+  returned: when I(state) is C(gathered)
+  type: dict
+rendered:
+  description: Rendered CLI commands when I(state) is C(rendered).
+  returned: when I(state) is C(rendered)
+  type: list
 """
 
 from ansible.module_utils.basic import AnsibleModule

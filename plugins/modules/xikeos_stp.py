@@ -13,6 +13,12 @@ module: xikeos_stp
 short_description: Manage STP settings on Xike OS devices
 version_added: "0.1.0"
 description:
+  - This module currently only supports C(state=rendered) to generate CLI
+    commands for STP; it does not connect to or apply configuration on the
+    device.
+  - Mutating lifecycle states such as C(merged) and C(replaced) are present in
+    the argument schema for future support, but they are currently unsupported
+    and fail when configuration is supplied.
   - This module provides declarative management of Spanning Tree Protocol (STP)
     on Xike OS devices.
   - Supports STP, RSTP, MSTP, PVST, and Rapid-PVST modes.
@@ -94,8 +100,9 @@ options:
   state:
     description:
       - State of the STP configuration.
-      - C(merged) - Creates or updates STP settings as specified.
-      - C(replaced) - Replaces existing STP configuration with specified config.
+      - C(rendered) - Generates CLI commands only.
+      - C(merged) and C(replaced) are currently unsupported and fail when
+        configuration is supplied.
     type: str
     choices: ['merged', 'replaced', 'rendered']
     default: merged
@@ -103,7 +110,7 @@ author: clemon
 """
 
 EXAMPLES = """
-- name: Enable STP with RSTP mode
+- name: Render STP commands with RSTP mode
   c1emon.xikeos.xikeos_stp:
     config:
       stp_mode: rstp
@@ -111,9 +118,9 @@ EXAMPLES = """
       hello_time: 2
       forward_time: 15
       max_age: 20
-    state: merged
+    state: rendered
 
-- name: Configure MSTP with region and instances
+- name: Render STP commands with MSTP region and instances
   c1emon.xikeos.xikeos_stp:
     config:
       stp_mode: mstp
@@ -127,9 +134,9 @@ EXAMPLES = """
           - instance_id: 2
             priority: 16384
             vlans: [100, 200]
-    state: merged
+    state: rendered
 
-- name: Configure PVST instances
+- name: Render STP commands with PVST instances
   c1emon.xikeos.xikeos_stp:
     config:
       stp_mode: pvst
@@ -139,21 +146,25 @@ EXAMPLES = """
             vlan_id: 10
           - instance_id: 20
             vlan_id: 20
-    state: merged
+    state: rendered
 
-- name: Enable BPDU guard and set pathcost standard
+- name: Render STP commands with BPDU settings
   c1emon.xikeos.xikeos_stp:
     config:
       stp_mode: rstp
       bpdu_guard: true
       bpdu_filter: false
       pathcost_standard: dot1t
-    state: merged
+    state: rendered
 """
 
 RETURN = """
+changed:
+  description: Whether the module changed the device configuration.
+  returned: always
+  type: bool
 commands:
-  description: List of commands sent to the device
+  description: List of commands rendered for the device.
   returned: always
   type: list
   sample:
@@ -161,6 +172,10 @@ commands:
     - stp mode rstp
     - stp priority 32768
     - stp hello-time 2
+rendered:
+  description: Rendered CLI commands when I(state) is C(rendered).
+  returned: when I(state) is C(rendered)
+  type: list
 """
 
 from ansible.module_utils.basic import AnsibleModule

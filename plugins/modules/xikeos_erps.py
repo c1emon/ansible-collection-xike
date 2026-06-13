@@ -13,6 +13,12 @@ module: xikeos_erps
 short_description: Manage ERPS (G.8032) ring protection on Xike OS devices
 version_added: "0.1.0"
 description:
+  - This module currently only supports C(state=rendered) to generate CLI
+    commands for ERPS; it does not connect to or apply configuration on the
+    device.
+  - Mutating lifecycle states such as C(present) and C(absent) are present in
+    the argument schema for future support, but they are currently unsupported
+    and fail when configuration is supplied.
   - This module provides declarative management of Ethernet Ring Protection
     Switching (ERPS) as defined in ITU-T G.8032 on Xike OS devices.
   - Supports configuration of ERPS instances, control VLANs, port roles,
@@ -69,8 +75,9 @@ options:
   state:
     description:
       - State of the ERPS configuration.
-      - C(present) - Creates or updates the ERPS instance.
-      - C(absent) - Removes the ERPS instance.
+      - C(rendered) - Generates CLI commands only.
+      - C(present) and C(absent) are currently unsupported and fail when
+        configuration is supplied.
     type: str
     choices: ['present', 'absent', 'rendered']
     default: present
@@ -78,7 +85,7 @@ author: clemon
 """
 
 EXAMPLES = """
-- name: Configure ERPS instance 1 with control VLAN 100
+- name: Render ERPS instance 1 commands with control VLAN 100
   c1emon.xikeos.xikeos_erps:
     instance_id: 1
     control_vlan: 100
@@ -90,9 +97,9 @@ EXAMPLES = """
     guard_timer: 500
     wtr_timer: 5
     mel: 5
-    state: present
+    state: rendered
 
-- name: Configure ERPS instance 2 with LAG ports
+- name: Render ERPS instance 2 commands with LAG ports
   c1emon.xikeos.xikeos_erps:
     instance_id: 2
     control_vlan: 200
@@ -101,17 +108,21 @@ EXAMPLES = """
     work_mode: non-revertive
     protected_instances: "10-20"
     ring_enable: true
-    state: present
+    state: rendered
 
-- name: Remove ERPS instance 1
+- name: Render ERPS instance 1 commands
   c1emon.xikeos.xikeos_erps:
     instance_id: 1
-    state: absent
+    state: rendered
 """
 
 RETURN = """
+changed:
+  description: Whether the module changed the device configuration.
+  returned: always
+  type: bool
 commands:
-  description: List of commands sent to the device
+  description: List of commands rendered for the device.
   returned: always
   type: list
   sample:
@@ -123,6 +134,10 @@ commands:
     - work-mode revertive
     - protected-instance 1,2,3
     - ring enable
+rendered:
+  description: Rendered CLI commands when I(state) is C(rendered).
+  returned: when I(state) is C(rendered)
+  type: list
 """
 
 from ansible.module_utils.basic import AnsibleModule

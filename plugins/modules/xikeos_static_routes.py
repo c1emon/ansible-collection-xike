@@ -129,9 +129,13 @@ EXAMPLES = """
 """
 
 RETURN = """
+changed:
+  description: Whether the module changed the device configuration.
+  returned: always
+  type: bool
 before:
   description: The configuration prior to the module execution.
-  returned: when I(state) is C(merged) or C(replaced)
+  returned: when I(state) is C(merged), C(replaced), or C(deleted)
   type: list
   sample:
     - destination: 0.0.0.0
@@ -141,7 +145,7 @@ before:
       route_type: ipv4
 after:
   description: The configuration after the module execution.
-  returned: when I(state) is C(merged) or C(replaced)
+  returned: when I(state) is C(merged), C(replaced), or C(deleted)
   type: list
   sample:
     - destination: 0.0.0.0
@@ -151,12 +155,20 @@ after:
       route_type: ipv4
 commands:
   description: The set of commands pushed to the device.
-  returned: always
+  returned: when I(state) is C(merged), C(replaced), C(deleted), or C(rendered)
   type: list
   sample:
     - ip route 0.0.0.0 0.0.0.0 10.0.0.1
     - ip route 192.168.100.0 255.255.255.0 10.0.0.2 10
     - ipv6 route 2001:db8::/32 2001:db8::1
+gathered:
+  description: Static route state gathered from the device when I(state) is C(gathered).
+  returned: when I(state) is C(gathered)
+  type: list
+rendered:
+  description: Rendered CLI commands when I(state) is C(rendered).
+  returned: when I(state) is C(rendered)
+  type: list
 """
 
 import ipaddress
