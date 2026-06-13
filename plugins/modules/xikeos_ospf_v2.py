@@ -9,12 +9,16 @@ __metaclass__ = type
 from typing import Any, Mapping, Optional, Sequence
 
 DOCUMENTATION = """
-module: xikeos_ospfv2
+module: xikeos_ospf_v2
 short_description: Manage OSPFv2 routing protocol on Xike switches
 version_added: "0.1.0"
 description:
-  - This module provides declarative management of OSPFv2 routing protocol
-    configurations on Xike (兮克) switches.
+  - This module currently only supports C(state=rendered) to generate CLI
+    commands for OSPFv2; it does not connect to or apply configuration on the
+    device.
+  - Mutating lifecycle states such as C(merged) and C(replaced) are present in
+    the argument schema for future support, but they are currently unsupported
+    and fail when configuration is supplied.
   - Xike uses Cisco IOS-like OSPF commands (router ospf, network, etc.).
 options:
   config:
@@ -77,12 +81,16 @@ options:
         type: int
         choices: [1, 2]
       passive_interfaces:
-        description: List of interfaces to make passive (suppress hello packets)
+        description:
+          - List of interfaces to make passive and suppress hello packets.
+          - Use interface names such as C(vlan-interface 10), or C(default) for all.
         type: list
         elements: str
-        description: Interface names (e.g., 'vlan-interface 10') or 'default' for all
   state:
-    description: Desired state of the configuration
+    description:
+      - Desired state of the configuration.
+      - C(rendered) generates CLI commands only and does not apply configuration.
+      - C(merged) and C(replaced) are reserved for future support and currently fail when configuration is supplied.
     type: str
     default: merged
     choices: ['merged', 'replaced', 'rendered']
@@ -90,8 +98,8 @@ author: clemon
 """
 
 EXAMPLES = """
-- name: Configure OSPFv2 with network statements
-  c1emon.xikeos.xikeos_ospfv2:
+- name: Render OSPFv2 commands with network statements
+  c1emon.xikeos.xikeos_ospf_v2:
     config:
       process_id: 1
       router_id: 1.1.1.1
@@ -102,10 +110,10 @@ EXAMPLES = """
         - network: 192.168.1.0
           wildcard: 0.0.0.255
           area: "1"
-    state: merged
+    state: rendered
 
-- name: Configure OSPFv2 with redistribution
-  c1emon.xikeos.xikeos_ospfv2:
+- name: Render OSPFv2 commands with redistribution
+  c1emon.xikeos.xikeos_ospf_v2:
     config:
       process_id: 1
       router_id: 1.1.1.1
@@ -118,10 +126,10 @@ EXAMPLES = """
           metric: 10
         - protocol: connected
           route_map: REDIST-CONNECTED
-    state: merged
+    state: rendered
 
-- name: Configure OSPFv2 with default-information originate
-  c1emon.xikeos.xikeos_ospfv2:
+- name: Render OSPFv2 commands with default-information originate
+  c1emon.xikeos.xikeos_ospf_v2:
     config:
       process_id: 1
       router_id: 1.1.1.1
@@ -129,10 +137,10 @@ EXAMPLES = """
       default_info_originate_always: true
       default_info_originate_metric: 100
       default_info_originate_metric_type: 2
-    state: merged
+    state: rendered
 
-- name: Configure OSPFv2 with passive interfaces
-  c1emon.xikeos.xikeos_ospfv2:
+- name: Render OSPFv2 commands with passive interfaces
+  c1emon.xikeos.xikeos_ospf_v2:
     config:
       process_id: 1
       router_id: 1.1.1.1
@@ -143,10 +151,10 @@ EXAMPLES = """
       passive_interfaces:
         - vlan-interface 10
         - vlan-interface 20
-    state: merged
+    state: rendered
 
-- name: Replace entire OSPFv2 configuration
-  c1emon.xikeos.xikeos_ospfv2:
+- name: Render OSPFv2 replace commands
+  c1emon.xikeos.xikeos_ospf_v2:
     config:
       process_id: 1
       router_id: 2.2.2.2
@@ -154,57 +162,34 @@ EXAMPLES = """
         - network: 172.16.0.0
           wildcard: 0.0.255.255
           area: "0"
-    state: replaced
+    state: rendered
 """
 
 RETURN = """
-before:
-  description: The OSPFv2 configuration prior to the module execution
-  returned: when I(state) is C(merged) or C(replaced)
-  type: dict
-  sample:
-    processes:
-      '1':
-        process_id: 1
-        router_id: 1.1.1.1
-        networks:
-          - network: 10.0.0.0
-            wildcard: 0.0.255.255
-            area: "0"
-after:
-  description: The OSPFv2 configuration after the module execution
-  returned: when I(state) is C(merged) or C(replaced)
-  type: dict
-  sample:
-    processes:
-      '1':
-        process_id: 1
-        router_id: 1.1.1.1
-        networks:
-          - network: 10.0.0.0
-            wildcard: 0.0.255.255
-            area: "0"
+changed:
+  description: Whether the module changed the device configuration.
+  returned: always
+  type: bool
 commands:
-  description: The set of commands pushed to the device
+  description: The set of commands rendered for the device.
   returned: always
   type: list
   sample:
     - router ospf 1
     - ospf router-id 1.1.1.1
     - network 10.0.0.0 0.0.255.255 area 0
+rendered:
+  description: Rendered CLI commands when I(state) is C(rendered).
+  returned: when I(state) is C(rendered)
+  type: list
 """
 
 from ansible.module_utils.basic import AnsibleModule
-from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import exit_rendered_or_fail
-
-try:
-    from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.ospfv2 import (
-        Ospfv2Facts,
-    )
-    HAS_FACTS = True
-except ImportError:
-    HAS_FACTS = False
-
+from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.ospfv2 import Ospfv2Facts
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import (
+    exit_rendered_or_fail,
+    gather_with_error_boundary,
+)
 
 def _normalize_config(config: Optional[Mapping[str, Any]]) -> dict[str, Any]:
     """Normalize config and canonicalize OSPF network area values."""
@@ -252,9 +237,6 @@ def build_commands(
 
     commands = []
     existing = _get_existing_process(existing_config, process_id)
-
-    # Check if the process already exists
-    process_exists = bool(existing)
 
     # --- Router ospf entry command ---
     commands.append('router ospf {0}'.format(process_id))
@@ -471,7 +453,7 @@ def main() -> None:
     if state == 'rendered':
         exit_rendered_or_fail(
             module,
-            'xikeos_ospfv2',
+            'xikeos_ospf_v2',
             config,
             state,
             lambda cfg, _state: build_commands(cfg, {'processes': {}}),
@@ -480,18 +462,20 @@ def main() -> None:
     elif config is not None:
         module.fail_json(
             msg=(
-                'xikeos_ospfv2 supports state=rendered only until lifecycle-safe gather, diff, '
+                'xikeos_ospf_v2 supports state=rendered only until lifecycle-safe gather, diff, '
                 'and load_config apply support is implemented; state={0} is unsupported'
             ).format(state)
         )
         return
 
     # Gather existing facts
-    if HAS_FACTS:
-        facts = Ospfv2Facts(module)
-        existing_config = facts.facts
-    else:
-        existing_config = {'processes': {}}
+    existing_config = gather_with_error_boundary(
+        module,
+        lambda: Ospfv2Facts(module).facts,
+        'failed to gather OSPFv2 facts',
+        'ospf_v2',
+        {},
+    )
 
     result = {
         'changed': False,
@@ -544,9 +528,14 @@ def main() -> None:
     result['changed'] = bool(deduped)
 
     # Refresh facts for 'after'
-    if HAS_FACTS and deduped:
-        facts_after = Ospfv2Facts(module)
-        result['after'] = facts_after.facts
+    if deduped:
+        result['after'] = gather_with_error_boundary(
+            module,
+            lambda: Ospfv2Facts(module).facts,
+            'failed to gather OSPFv2 facts after apply',
+            'ospf_v2',
+            existing_config,
+        )
     else:
         result['after'] = existing_config
 

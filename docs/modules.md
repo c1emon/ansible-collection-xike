@@ -1,12 +1,12 @@
 # c1emon.xikeos Module Reference
 
-Complete reference for all 17 modules in the `c1emon.xikeos` collection.
+Complete reference for all 18 modules in the `c1emon.xikeos` collection.
 
 Resource-module state behavior is explicit:
 
 - Lifecycle-complete modules (`xikeos_vlans`, `xikeos_static_routes`, `xikeos_acls`, `xikeos_interfaces`, `xikeos_l2_interfaces`, `xikeos_l3_interfaces`, `xikeos_lag_interfaces`) gather current state, compute diffs, honor check mode, apply changes through the Xike OS network configuration path, and report `before`/`after`.
 - `xikeos_vlans` also supports non-mutating `state=gathered`.
-- Specialty modules (`xikeos_stp`, `xikeos_erps`, `xikeos_eaps`, `xikeos_qinq`, `xikeos_mirror`, `xikeos_port_isolate`, `xikeos_flex_monitor_link`, `xikeos_ospfv2`) currently support explicit non-mutating `state=rendered`; their mutating states fail fast until facts/diff/apply support is implemented.
+- Specialty modules (`xikeos_stp`, `xikeos_erps`, `xikeos_eaps`, `xikeos_qinq`, `xikeos_mirror`, `xikeos_port_isolate`, `xikeos_flex_monitor_link`, `xikeos_ospf_v2`) currently support explicit non-mutating `state=rendered`; their mutating states fail fast until facts/diff/apply support is implemented.
 
 ## Table of Contents
 
@@ -18,7 +18,7 @@ Resource-module state behavior is explicit:
 - [VLAN Modules](#vlan-modules)
   - [xikeos_vlans](#xikeos_vlans)
 - [Routing Modules](#routing-modules)
-  - [xikeos_ospfv2](#xikeos_ospfv2)
+  - [xikeos_ospf_v2](#xikeos_ospf_v2)
   - [xikeos_static_routes](#xikeos_static_routes)
 - [Security Modules](#security-modules)
   - [xikeos_acls](#xikeos_acls)
@@ -31,6 +31,7 @@ Resource-module state behavior is explicit:
   - [xikeos_qinq](#xikeos_qinq)
   - [xikeos_flex_monitor_link](#xikeos_flex_monitor_link)
 - [Fallback Modules](#fallback-modules)
+  - [xikeos_facts](#xikeos_facts)
   - [xikeos_config](#xikeos_config)
   - [xikeos_command](#xikeos_command)
 
@@ -322,7 +323,7 @@ exit
 
 ## Routing Modules
 
-### xikeos_ospfv2
+### xikeos_ospf_v2
 
 Manage OSPFv2 routing protocol on Xike switches.
 
@@ -368,7 +369,7 @@ passive-interface vlan-interface 10
 **Example**:
 ```yaml
 - name: Configure OSPF
-  c1emon.xikeos.xikeos_ospfv2:
+  c1emon.xikeos.xikeos_ospf_v2:
     config:
       process_id: 1
       router_id: 1.1.1.1
@@ -1046,7 +1047,7 @@ Execute read-only show commands on Xike switches.
 | `xikeos_l3_interfaces` | Interface | merged, replaced | VLAN interface IPs |
 | `xikeos_lag_interfaces` | Interface | merged, replaced | LAG eth-trunk bundles |
 | `xikeos_vlans` | VLAN | merged, replaced, deleted | VLAN management |
-| `xikeos_ospfv2` | Routing | merged, replaced | OSPFv2 protocol |
+| `xikeos_ospf_v2` | Routing | merged, replaced | OSPFv2 protocol |
 | `xikeos_static_routes` | Routing | merged, replaced, deleted | Static routes |
 | `xikeos_acls` | Security | merged, replaced, deleted | Access Control Lists |
 | `xikeos_stp` | Security | merged, replaced | Spanning Tree Protocol |

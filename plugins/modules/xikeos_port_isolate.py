@@ -13,6 +13,11 @@ module: xikeos_port_isolate
 short_description: Manage port isolation groups on Xike OS switches
 version_added: "0.1.0"
 description:
+  - This module currently only supports C(state=rendered) to generate CLI
+    commands for port isolation groups; it does not connect to or apply
+    configuration on the device.
+  - C(present) and C(absent) are documented for future lifecycle support but
+    are currently unsupported and fail when configuration is supplied.
   - Configure port isolation groups on Xike OS devices.
   - Ports in the same isolation group cannot communicate with each other,
     but can communicate with ports outside the group.
@@ -37,8 +42,9 @@ options:
   state:
     description:
       - State of the port isolation group configuration.
-      - C(present) - Creates or updates the port isolation group.
-      - C(absent) - Removes the port isolation group or specified members.
+      - C(rendered) - Generates CLI commands only.
+      - C(present) and C(absent) are currently unsupported and fail when
+        configuration is supplied.
     type: str
     choices: ['present', 'absent', 'rendered']
     default: present
@@ -46,7 +52,7 @@ author: clemon
 """
 
 EXAMPLES = """
-- name: Create a port isolation group with members
+- name: Render port isolation commands with members
   c1emon.xikeos.xikeos_port_isolate:
     config:
       group_id: 1
@@ -54,40 +60,48 @@ EXAMPLES = """
         - ethernet 0/0/1
         - ethernet 0/0/2
         - ethernet 0/0/3
-    state: present
+    state: rendered
 
-- name: Add all ports to an isolation group
+- name: Render port isolation commands for all ports
   c1emon.xikeos.xikeos_port_isolate:
     config:
       group_id: 2
       members:
         - all
-    state: present
+    state: rendered
 
-- name: Remove specific members from an isolation group
+- name: Render port isolation commands with specific members
   c1emon.xikeos.xikeos_port_isolate:
     config:
       group_id: 1
       members:
         - ethernet 0/0/2
-    state: absent
+    state: rendered
 
-- name: Delete a port isolation group
+- name: Render port isolation commands for a group
   c1emon.xikeos.xikeos_port_isolate:
     config:
       group_id: 1
-    state: absent
+    state: rendered
 """
 
 RETURN = """
+changed:
+  description: Whether the module changed the device configuration.
+  returned: always
+  type: bool
 commands:
-  description: CLI commands sent to the device
+  description: CLI commands rendered for the device.
   returned: always
   type: list
   sample:
     - interface port-isolate group 1
     - switchport ethernet 0/0/1
     - switchport ethernet 0/0/2
+rendered:
+  description: Rendered CLI commands when I(state) is C(rendered).
+  returned: when I(state) is C(rendered)
+  type: list
 """
 
 from ansible.module_utils.basic import AnsibleModule

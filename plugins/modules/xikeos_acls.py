@@ -13,10 +13,10 @@ version_added: "0.1.0"
 description:
   - This module provides declarative management of ACLs on Xike (兮克) OS devices.
   - Manages Standard, MAC, and Mixed ACLs.
-  - Xike OS uses different ACL numbering than Cisco IOS:
-    - Standard ACL: 1-999
-    - MAC ACL: 1000-1999
-    - Mixed ACL: 2000-2999
+  - Xike OS uses different ACL numbering than Cisco IOS.
+  - Standard ACL range is 1-999.
+  - MAC ACL range is 1000-1999.
+  - Mixed ACL range is 2000-2999.
 options:
   config:
     description:
@@ -28,10 +28,10 @@ options:
       acl_id:
         description:
           - ACL identifier number.
-          - Valid ranges depend on C(acl_type):
-            - Standard: 1-999
-            - MAC: 1000-1999
-            - Mixed: 2000-2999
+          - Valid ranges depend on C(acl_type).
+          - Standard ACL range is 1-999.
+          - MAC ACL range is 1000-1999.
+          - Mixed ACL range is 2000-2999.
         type: int
         required: true
       acl_type:
@@ -51,14 +51,14 @@ options:
       rules:
         description:
           - List of ACL rules.
-          - Rules are applied in order (by sequence number or insertion order).
+          - Rules are applied in insertion order.
         type: list
         elements: dict
         suboptions:
           sequence:
             description:
               - Sequence number for the rule (1-65535).
-              - If not specified, rules are numbered automatically (10, 20, 30, ...).
+              - This field is accepted for compatibility, but the current command builder does not use it to generate or sort commands.
             type: int
           action:
             description:
@@ -71,24 +71,24 @@ options:
           protocol:
             description:
               - Protocol to match.
-              - For Standard ACL: always 'ip'.
-              - For MAC ACL: always 'mac'.
-              - For Mixed ACL: 'ip', 'tcp', 'udp', 'icmp', etc.
+              - For Standard ACL, always 'ip'.
+              - For MAC ACL, always 'mac'.
+              - For Mixed ACL, 'ip', 'tcp', 'udp', 'icmp', etc.
             type: str
             default: 'ip'
           source:
             description:
               - Source address to match.
               - Can be an IP address, network/wildcard, or 'any'.
-              - For MAC ACL: MAC address in HHHH.HHHH.HHHH format.
+              - For MAC ACL, MAC address in HHHH.HHHH.HHHH format.
             type: str
             required: true
           destination:
             description:
               - Destination address to match.
               - Can be an IP address, network/wildcard, or 'any'.
-              - For MAC ACL: MAC address in HHHH.HHHH.HHHH format.
-              - For Standard ACL: always 'any' (implicit).
+              - For MAC ACL, MAC address in HHHH.HHHH.HHHH format.
+              - For Standard ACL, always 'any' (implicit).
             type: str
             default: 'any'
           remark:
@@ -102,8 +102,10 @@ options:
       - C(merged) - Creates or updates ACLs as specified.
       - C(replaced) - Replaces existing ACL configuration with specified config.
       - C(deleted) - Deletes ACLs specified in config.
+      - C(gathered) - Gathers ACL state without changing the device.
+      - C(rendered) - Renders CLI commands without connecting to the device.
     type: str
-    choices: ['merged', 'replaced', 'deleted']
+    choices: ['merged', 'replaced', 'deleted', 'gathered', 'rendered']
     default: merged
 author: clemon
 """
@@ -180,9 +182,13 @@ EXAMPLES = """
 """
 
 RETURN = """
+changed:
+  description: Whether the module changed the device configuration.
+  returned: always
+  type: bool
 before:
   description: The configuration prior to the module execution.
-  returned: when I(state) is C(merged) or C(replaced)
+  returned: when I(state) is C(merged), C(replaced), or C(deleted)
   type: list
   sample:
     - acl_id: 100
@@ -192,7 +198,7 @@ before:
           source: 192.168.0.0 0.0.255.255
 after:
   description: The configuration after the module execution.
-  returned: when I(state) is C(merged) or C(replaced)
+  returned: when I(state) is C(merged), C(replaced), or C(deleted)
   type: list
   sample:
     - acl_id: 100
@@ -202,29 +208,31 @@ after:
           source: 10.0.0.0 0.255.255.255
 commands:
   description: The set of commands pushed to the device.
-  returned: always
+  returned: when I(state) is C(merged), C(replaced), C(deleted), or C(rendered)
   type: list
   sample:
     - access-list 100 permit 192.168.0.0 0.0.255.255
     - access-list 100 deny any
+gathered:
+  description: ACL state gathered from the device when I(state) is C(gathered).
+  returned: when I(state) is C(gathered)
+  type: list
+rendered:
+  description: Rendered CLI commands when I(state) is C(rendered).
+  returned: when I(state) is C(rendered)
+  type: list
 """
 
 from ansible.module_utils.basic import AnsibleModule
+from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.acls import AclsFacts
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import gather_with_error_boundary
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import run_resource_module_lifecycle
 from typing import Any
 
 AclRule = dict[str, Any]
 AclConfig = dict[str, Any]
 RuleKey = tuple[Any, Any, Any, Any]
-
-try:
-    from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.acls import (
-        AclsFacts,
-    )
-    HAS_FACTS = True
-except ImportError:
-    HAS_FACTS = False
-
 
 # Valid ACL ID ranges
 STANDARD_ACL_RANGE = (1, 999)
@@ -299,7 +307,6 @@ def build_acl_commands(config: list[AclConfig], existing_acls: list[AclConfig]) 
     for acl_config in config:
         acl_id = acl_config['acl_id']
         acl_type = acl_config.get('acl_type', 'standard')
-        remark = acl_config.get('remark', '')
         rules = acl_config.get('rules', [])
 
         existing = existing_by_id.get(acl_id, {})
@@ -461,6 +468,32 @@ def build_after_state(
     return [after_by_id[acl_id] for acl_id in sorted(after_by_id)]
 
 
+def build_lifecycle_commands(
+    config: list[AclConfig],
+    state: str,
+    existing_acls: list[AclConfig],
+) -> list[str]:
+    """Build commands for lifecycle execution."""
+    if state in ('merged', 'rendered'):
+        return build_acl_commands(config, existing_acls)
+    if state == 'replaced':
+        return build_replaced_commands(config, existing_acls)
+    if state == 'deleted':
+        return build_delete_commands(config, existing_acls)
+    return []
+
+
+def gather_acls(module):
+    """Gather ACL facts with the shared error boundary."""
+    return gather_with_error_boundary(
+        module,
+        lambda: AclsFacts(module).facts.get('acls', []),
+        'failed to gather ACL facts',
+        'acls',
+        [],
+    )
+
+
 def main() -> None:
     """Main entry point for the module."""
     module_args = dict(
@@ -515,7 +548,7 @@ def main() -> None:
         ),
         state=dict(
             type='str',
-            choices=['merged', 'replaced', 'deleted'],
+            choices=['merged', 'replaced', 'deleted', 'gathered', 'rendered'],
             default='merged',
         ),
     )
@@ -528,13 +561,6 @@ def main() -> None:
     config = module.params.get('config', []) or []
     state = module.params.get('state', 'merged')
 
-    result = {
-        'changed': False,
-        'commands': [],
-        'before': [],
-        'after': [],
-    }
-
     # Validate ACL IDs
     for acl_config in config:
         acl_id = acl_config['acl_id']
@@ -542,47 +568,20 @@ def main() -> None:
         is_valid, error_msg = validate_acl_id(acl_id, acl_type)
         if not is_valid:
             module.fail_json(msg=error_msg)
-
-    if not HAS_FACTS:
-        module.fail_json(msg='ACL facts support is required for diffing')
-        return
-
-    try:
-        facts = AclsFacts(module)
-        existing_acls = facts.facts.get('acls', [])
-    except Exception as exc:
-        module.fail_json(msg='failed to gather ACL facts: {0}'.format(exc))
-        return
-
-    result['before'] = existing_acls
-
-    # Generate commands based on state
-    if state == 'merged':
-        commands = build_acl_commands(config, existing_acls)
-    elif state == 'replaced':
-        commands = build_replaced_commands(config, existing_acls)
-    elif state == 'deleted':
-        commands = build_delete_commands(config, existing_acls)
-    else:
-        commands = []
-
-    result['commands'] = commands
-    result['changed'] = bool(commands)
-    result['after'] = build_after_state(existing_acls, config, state) if commands else existing_acls
-
-    if module.check_mode:
-        module.exit_json(**result)
-
-    if commands:
-        load_config(module, commands)
-        try:
-            facts_after = AclsFacts(module)
-            result['after'] = facts_after.facts.get('acls', [])
-        except Exception as exc:
-            module.fail_json(msg='failed to gather ACL facts after apply: {0}'.format(exc))
-            return
-
-    module.exit_json(**result)
+    run_resource_module_lifecycle(
+        module=module,
+        config=config,
+        state=state,
+        gather=gather_acls,
+        build_commands=build_lifecycle_commands,
+        build_after=build_after_state,
+        mutating_states=('merged', 'replaced', 'deleted'),
+        gathered_states=('gathered',),
+        rendered_states=('rendered',),
+        rendered_current=[],
+        apply_config=load_config,
+        gather_after_apply=True,
+    )
 
 
 if __name__ == '__main__':

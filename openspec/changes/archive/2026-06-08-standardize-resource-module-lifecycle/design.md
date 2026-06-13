@@ -76,7 +76,7 @@ Tier 1: xikeos_vlans reference hardening
 Tier 2: xikeos_static_routes, xikeos_acls
 Tier 3: xikeos_interfaces, xikeos_l2_interfaces, xikeos_l3_interfaces, xikeos_lag_interfaces
 Tier 4: xikeos_stp, xikeos_erps, xikeos_eaps, xikeos_qinq, xikeos_mirror,
-        xikeos_port_isolate, xikeos_flex_monitor_link, xikeos_ospfv2
+        xikeos_port_isolate, xikeos_flex_monitor_link, xikeos_ospf_v2
 ```
 
 The first tiers remove the highest correctness risk: local command execution, fake after-state, and empty facts.

@@ -25,15 +25,15 @@ options:
       destination:
         description:
           - Network destination address.
-          - For IPv4: dotted-decimal format (e.g., '192.168.1.0').
-          - For IPv6: standard IPv6 format (e.g., '2001:db8::').
+          - "For IPv4: dotted-decimal format (e.g., '192.168.1.0')."
+          - "For IPv6: standard IPv6 format (e.g., '2001:db8::')."
         type: str
         required: true
       mask:
         description:
           - Subnet mask or prefix length.
-          - For IPv4: dotted-decimal mask (e.g., '255.255.255.0') or CIDR prefix (e.g., '24').
-          - For IPv6: prefix length as string (e.g., '64').
+          - "For IPv4: dotted-decimal mask (e.g., '255.255.255.0') or CIDR prefix (e.g., '24')."
+          - "For IPv6: prefix length as string (e.g., '64')."
         type: str
         required: true
       next_hop:
@@ -44,7 +44,7 @@ options:
       distance:
         description:
           - Administrative distance for the route.
-          - Valid range: 1-255.
+          - "Valid range: 1-255."
           - Default is 1 for static routes.
         type: int
         default: 1
@@ -53,17 +53,19 @@ options:
           - Type of static route.
           - C(ipv4) for IPv4 static routes.
           - C(ipv6) for IPv6 static routes.
+          - If omitted, the module infers the type from C(destination) or C(next_hop).
         type: str
         choices: ['ipv4', 'ipv6']
-        default: ipv4
   state:
     description:
       - State of the static route configuration.
       - C(merged) - Adds or updates static routes as specified.
       - C(replaced) - Replaces existing static routes with specified config.
       - C(deleted) - Deletes static routes specified in config.
+      - C(gathered) - Gathers static route state without changing the device.
+      - C(rendered) - Renders CLI commands without connecting to the device.
     type: str
-    choices: ['merged', 'replaced', 'deleted']
+    choices: ['merged', 'replaced', 'deleted', 'gathered', 'rendered']
     default: merged
 author: clemon
 """
@@ -96,9 +98,9 @@ EXAMPLES = """
 - name: Add IPv6 static route
   c1emon.xikeos.xikeos_static_routes:
     config:
-      - destination: 2001:db8::
+      - destination: "2001:db8::"
         mask: 32
-        next_hop: 2001:db8::1
+        next_hop: "2001:db8::1"
         route_type: ipv6
     state: merged
 
@@ -127,9 +129,13 @@ EXAMPLES = """
 """
 
 RETURN = """
+changed:
+  description: Whether the module changed the device configuration.
+  returned: always
+  type: bool
 before:
   description: The configuration prior to the module execution.
-  returned: when I(state) is C(merged) or C(replaced)
+  returned: when I(state) is C(merged), C(replaced), or C(deleted)
   type: list
   sample:
     - destination: 0.0.0.0
@@ -139,7 +145,7 @@ before:
       route_type: ipv4
 after:
   description: The configuration after the module execution.
-  returned: when I(state) is C(merged) or C(replaced)
+  returned: when I(state) is C(merged), C(replaced), or C(deleted)
   type: list
   sample:
     - destination: 0.0.0.0
@@ -149,33 +155,53 @@ after:
       route_type: ipv4
 commands:
   description: The set of commands pushed to the device.
-  returned: always
+  returned: when I(state) is C(merged), C(replaced), C(deleted), or C(rendered)
   type: list
   sample:
     - ip route 0.0.0.0 0.0.0.0 10.0.0.1
     - ip route 192.168.100.0 255.255.255.0 10.0.0.2 10
     - ipv6 route 2001:db8::/32 2001:db8::1
+gathered:
+  description: Static route state gathered from the device when I(state) is C(gathered).
+  returned: when I(state) is C(gathered)
+  type: list
+rendered:
+  description: Rendered CLI commands when I(state) is C(rendered).
+  returned: when I(state) is C(rendered)
+  type: list
 """
 
+import ipaddress
+
 from ansible.module_utils.basic import AnsibleModule
+from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.static_routes import StaticRoutesFacts
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import gather_with_error_boundary, run_resource_module_lifecycle
 from typing import Any
 
 RouteConfig = dict[str, Any]
 RouteKey = tuple[Any, Any, Any]
 
-try:
-    from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.static_routes import (
-        StaticRoutesFacts,
-    )
-    HAS_FACTS = True
-except ImportError:
-    HAS_FACTS = False
-
-
 # Valid distance range
 MIN_DISTANCE = 1
 MAX_DISTANCE = 255
+
+
+def infer_route_type(route: RouteConfig) -> str:
+    """Infer route type from explicit option or IP address fields."""
+    explicit = route.get('route_type')
+    if explicit:
+        return explicit
+    for field in ('destination', 'next_hop'):
+        value = str(route.get(field) or '').split('/', 1)[0]
+        if not value:
+            continue
+        try:
+            address = ipaddress.ip_address(value)
+        except ValueError:
+            continue
+        return 'ipv6' if address.version == 6 else 'ipv4'
+    return 'ipv4'
 
 
 def normalize_route(route: RouteConfig) -> RouteConfig:
@@ -185,9 +211,13 @@ def normalize_route(route: RouteConfig) -> RouteConfig:
     """
     normalized = dict(route)
 
-    route_type = route.get('route_type', 'ipv4')
-    destination = route.get('destination', '')
-    mask = route.get('mask', '')
+    route_type = infer_route_type(route)
+    normalized['route_type'] = route_type
+    normalized['destination'] = route.get('destination', '')
+    normalized['mask'] = str(route.get('mask', ''))
+    normalized['next_hop'] = route.get('next_hop', '')
+    normalized['distance'] = route.get('distance', 1)
+    mask = str(normalized['mask'])
 
     if route_type == 'ipv4':
         # Ensure mask is in dotted-decimal format
@@ -245,11 +275,11 @@ def build_static_route_commands(
                 and existing.get('distance', 1) == normalized_route.get('distance', 1)
             ):
                 continue
-        route_type = route.get('route_type', 'ipv4')
-        destination = route.get('destination', '')
-        mask = route.get('mask', '')
-        next_hop = route.get('next_hop', '')
-        distance = route.get('distance', 1)
+        route_type = normalized_route.get('route_type', 'ipv4')
+        destination = normalized_route.get('destination', '')
+        mask = normalized_route.get('mask', '')
+        next_hop = normalized_route.get('next_hop', '')
+        distance = normalized_route.get('distance', 1)
 
         if route_type == 'ipv4':
             cmd = 'ip route {0} {1} {2}'.format(destination, mask, next_hop)
@@ -290,6 +320,7 @@ def build_delete_commands(
     # If config is empty, delete all static routes
     if not config:
         for route in existing_routes:
+            route = normalize_route(route)
             route_type = route.get('route_type', 'ipv4')
             destination = route.get('destination', '')
             mask = route.get('mask', '')
@@ -304,6 +335,7 @@ def build_delete_commands(
     for route in existing_routes:
         key = route_key(route)
         if key in delete_keys:
+            route = normalize_route(route)
             route_type = route.get('route_type', 'ipv4')
             destination = route.get('destination', '')
             mask = route.get('mask', '')
@@ -356,6 +388,21 @@ def build_replaced_commands(
     return commands
 
 
+def build_lifecycle_commands(
+    config: list[RouteConfig],
+    state: str,
+    existing_routes: list[RouteConfig],
+) -> list[str]:
+    """Build commands for static route resource lifecycle states."""
+    if state == 'merged' or state == 'rendered':
+        return build_static_route_commands(config, existing_routes)
+    if state == 'replaced':
+        return build_replaced_commands(config, existing_routes)
+    if state == 'deleted':
+        return build_delete_commands(config, existing_routes)
+    return []
+
+
 def build_after_state(
     before: list[RouteConfig],
     desired: list[RouteConfig],
@@ -381,6 +428,15 @@ def build_after_state(
     return [after_by_key[key] for key in sorted(after_by_key)]
 
 
+def gather_static_routes(module: Any) -> list[RouteConfig]:
+    """Gather static route facts required for idempotent diffing."""
+    def _gather() -> list[RouteConfig]:
+        facts = StaticRoutesFacts(module)
+        return facts.facts.get('static_routes', [])
+
+    return gather_with_error_boundary(module, _gather, 'failed to gather static route facts', 'static_routes', [])
+
+
 def prefix_to_ipv4_mask(prefix_len: int) -> str:
     """Convert CIDR prefix length to dotted-decimal mask."""
     if prefix_len == 0:
@@ -398,8 +454,7 @@ def ipv4_mask_to_prefix(mask: str) -> int:
         parts = mask.split('.')
         if len(parts) != 4:
             return -1
-        bits = sum(int(p).bit_length() for p in parts)
-        # More accurate: convert to binary and count
+        # Convert to binary and count.
         binary = 0
         for p in parts:
             binary = (binary << 8) | int(p)
@@ -445,13 +500,13 @@ def main() -> None:
                 route_type=dict(
                     type='str',
                     choices=['ipv4', 'ipv6'],
-                    default='ipv4',
+                    default=None,
                 ),
             ),
         ),
         state=dict(
             type='str',
-            choices=['merged', 'replaced', 'deleted'],
+            choices=['merged', 'replaced', 'deleted', 'gathered', 'rendered'],
             default='merged',
         ),
     )
@@ -474,53 +529,20 @@ def main() -> None:
                 )
             )
 
-    result = {
-        'changed': False,
-        'commands': [],
-        'before': [],
-        'after': [],
-    }
-
-    if not HAS_FACTS:
-        module.fail_json(msg='static route facts support is required for diffing')
-        return
-
-    try:
-        facts = StaticRoutesFacts(module)
-        existing_routes = facts.facts.get('static_routes', [])
-    except Exception as exc:
-        module.fail_json(msg='failed to gather static route facts: {0}'.format(exc))
-        return
-
-    result['before'] = existing_routes
-
-    # Generate commands based on state
-    if state == 'merged':
-        commands = build_static_route_commands(config, existing_routes)
-    elif state == 'replaced':
-        commands = build_replaced_commands(config, existing_routes)
-    elif state == 'deleted':
-        commands = build_delete_commands(config, existing_routes)
-    else:
-        commands = []
-
-    result['commands'] = commands
-    result['changed'] = bool(commands)
-    result['after'] = build_after_state(existing_routes, config, state) if commands else existing_routes
-
-    if module.check_mode:
-        module.exit_json(**result)
-
-    if commands:
-        load_config(module, commands)
-        try:
-            facts_after = StaticRoutesFacts(module)
-            result['after'] = facts_after.facts.get('static_routes', [])
-        except Exception as exc:
-            module.fail_json(msg='failed to gather static route facts after apply: {0}'.format(exc))
-            return
-
-    module.exit_json(**result)
+    run_resource_module_lifecycle(
+        module=module,
+        config=config,
+        state=state,
+        gather=gather_static_routes,
+        build_commands=build_lifecycle_commands,
+        build_after=build_after_state,
+        mutating_states=('merged', 'replaced', 'deleted'),
+        gathered_states=('gathered',),
+        rendered_states=('rendered',),
+        rendered_current=[],
+        apply_config=load_config,
+        gather_after_apply=True,
+    )
 
 
 if __name__ == '__main__':

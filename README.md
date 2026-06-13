@@ -46,7 +46,7 @@ The `c1emon.xikeos` collection provides Ansible modules for automating **Xike (�
 │  xikeos_l2_interfaces  xikeos_port_isolate  xikeos_qinq         │
 │  xikeos_l3_interfaces  xikeos_acls          xikeos_flex_monitor │
 │  xikeos_lag_interfaces xikeos_static_routes xikeos_config       │
-│  xikeos_ospfv2         xikeos_command                           │
+│  xikeos_ospf_v2        xikeos_command                           │
 └───────────────────────────┬─────────────────────────────────────┘
                             │
                             ▼
@@ -282,7 +282,7 @@ all:
 | 82. Supervlan | supervlan-interface | `xikeos_l3_interfaces` | ⚠️ 部分 |
 | 83. Loopback | loopback-interface | `xikeos_l3_interfaces` | ⚠️ 部分 |
 | 86. 静态路由 | ip route, ipv6 route | `xikeos_static_routes` | ✅ |
-| 88. OSPF | router ospf, network, redistribute | `xikeos_ospfv2` | ✅ |
+| 88. OSPF | router ospf, network, redistribute | `xikeos_ospf_v2` | ✅ |
 | 端口镜像 | mirror group, source/destination | `xikeos_mirror` | ✅ |
 | 端口隔离 | port-isolate group | `xikeos_port_isolate` | ✅ |
 | QinQ | qinq mode, vlan insert/swap | `xikeos_qinq` | ✅ |
@@ -488,7 +488,7 @@ all:
 ```yaml
 # Basic OSPF configuration
 - name: Configure OSPF
-  c1emon.xikeos.xikeos_ospfv2:
+  c1emon.xikeos.xikeos_ospf_v2:
     config:
       process_id: 1
       router_id: 1.1.1.1
@@ -503,7 +503,7 @@ all:
 
 # OSPF with redistribution
 - name: Configure OSPF with redistribution
-  c1emon.xikeos.xikeos_ospfv2:
+  c1emon.xikeos.xikeos_ospf_v2:
     config:
       process_id: 1
       router_id: 1.1.1.1
@@ -950,7 +950,7 @@ xike-xikeos/
 │   │   ├── xikeos_l2_interfaces.py     # L2 access/trunk/hybrid
 │   │   ├── xikeos_l3_interfaces.py     # L3 VLAN interfaces
 │   │   ├── xikeos_lag_interfaces.py    # LAG eth-trunk bundles
-│   │   ├── xikeos_ospfv2.py            # OSPF routing
+│   │   ├── xikeos_ospf_v2.py           # OSPF routing
 │   │   ├── xikeos_static_routes.py     # Static routes
 │   │   ├── xikeos_acls.py              # Access Control Lists
 │   │   ├── xikeos_stp.py               # Spanning Tree Protocol

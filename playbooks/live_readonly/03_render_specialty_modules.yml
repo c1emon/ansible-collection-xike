@@ -86,7 +86,7 @@
       register: xikeos_flex_monitor_link_rendered
 
     - name: Render OSPFv2 commands without applying
-      c1emon.xikeos.xikeos_ospfv2:
+      c1emon.xikeos.xikeos_ospf_v2:
         config:
           process_id: 1
           router_id: 1.1.1.1
@@ -95,7 +95,7 @@
               wildcard: 0.0.0.255
               area: "0"
         state: rendered
-      register: xikeos_ospfv2_rendered
+      register: xikeos_ospf_v2_rendered
 
     - name: Assert rendered specialty modules stayed read-only
       ansible.builtin.assert:
@@ -107,7 +107,7 @@
           - not xikeos_mirror_rendered.changed
           - not xikeos_port_isolate_rendered.changed
           - not xikeos_flex_monitor_link_rendered.changed
-          - not xikeos_ospfv2_rendered.changed
+          - not xikeos_ospf_v2_rendered.changed
           - xikeos_stp_rendered.rendered is defined
           - xikeos_erps_rendered.rendered is defined
           - xikeos_eaps_rendered.rendered is defined
@@ -115,7 +115,7 @@
           - xikeos_mirror_rendered.rendered is defined
           - xikeos_port_isolate_rendered.rendered is defined
           - xikeos_flex_monitor_link_rendered.rendered is defined
-          - xikeos_ospfv2_rendered.rendered is defined
+          - xikeos_ospf_v2_rendered.rendered is defined
 
     - name: Display rendered command summary
       ansible.builtin.debug:
@@ -127,4 +127,4 @@
           mirror: "{{ xikeos_mirror_rendered.rendered }}"
           port_isolate: "{{ xikeos_port_isolate_rendered.rendered }}"
           flex_monitor_link: "{{ xikeos_flex_monitor_link_rendered.rendered }}"
-          ospfv2: "{{ xikeos_ospfv2_rendered.rendered }}"
+          ospfv2: "{{ xikeos_ospf_v2_rendered.rendered }}"

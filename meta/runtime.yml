@@ -1,3 +1,2 @@
 requires_ansible: ">=2.15.0"
-collections:
-  - ansible.netcommon
+collections: [ansible.netcommon]

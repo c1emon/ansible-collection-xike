@@ -9,6 +9,7 @@ from unittest.mock import Mock
 import pytest
 
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import run_resource_module_lifecycle
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos import errors as xikeos_errors
 
 from .lifecycle_helpers import ExitJson, fake_module
 
@@ -123,3 +124,85 @@ def test_resource_lifecycle_gathered_rendered_and_unsupported_states():
     with pytest.raises(ExitJson):
         run_resource_module_lifecycle(unsupported, [], "parsed", _gather, _build_commands, _build_after)
     assert "unsupported" in unsupported.fail_json.call_args.kwargs["msg"]
+
+
+def test_resource_lifecycle_rendered_does_not_gather_or_apply():
+    module = fake_module({"before": [{"name": "live"}]})
+    gather = Mock(side_effect=AssertionError("rendered must not gather current state"))
+    apply_config = Mock()
+
+    with pytest.raises(ExitJson):
+        run_resource_module_lifecycle(
+            module,
+            [{"name": "planned"}],
+            "rendered",
+            gather,
+            _build_commands,
+            _build_after,
+            apply_config=apply_config,
+        )
+
+    assert module.exit_json.call_args.kwargs["rendered"] == ["render planned"]
+    gather.assert_not_called()
+    apply_config.assert_not_called()
+
+
+def test_resource_lifecycle_reports_gather_apply_and_post_gather_failures():
+    module = fake_module({"before": []})
+    module.fail_json.side_effect = ExitJson
+
+    with pytest.raises(ExitJson):
+        run_resource_module_lifecycle(
+            module,
+            [{"name": "one"}],
+            "merged",
+            Mock(side_effect=xikeos_errors.XikeOSFactsError("gather failed", detail="nope", context="items")),
+            _build_commands,
+            _build_after,
+            apply_config=Mock(),
+        )
+
+    assert module.fail_json.call_args.kwargs["changed"] is False
+    assert module.fail_json.call_args.kwargs["gather_context"] == "resource gather"
+
+    module = fake_module({"before": []})
+    module.fail_json.side_effect = ExitJson
+    apply_config = Mock(side_effect=xikeos_errors.XikeOSConfigError("apply failed", commands=["set one"], detail="lost"))
+    with pytest.raises(ExitJson):
+        run_resource_module_lifecycle(
+            module,
+            [{"name": "one"}],
+            "merged",
+            _gather,
+            _build_commands,
+            _build_after,
+            apply_config=apply_config,
+        )
+
+    assert module.fail_json.call_args.kwargs["changed"] is True
+    assert module.fail_json.call_args.kwargs["commands"] == ["set one"]
+    assert module.fail_json.call_args.kwargs["partial_change"] is True
+
+    module = fake_module({"before": [], "after": [{"name": "one"}]})
+    module.fail_json.side_effect = ExitJson
+
+    def gather_after(module):
+        if apply_config.called:
+            raise xikeos_errors.XikeOSFactsError("verification failed", detail="mismatch", context="items")
+        return []
+
+    apply_config = Mock()
+    with pytest.raises(ExitJson):
+        run_resource_module_lifecycle(
+            module,
+            [{"name": "one"}],
+            "merged",
+            gather_after,
+            _build_commands,
+            _build_after,
+            apply_config=apply_config,
+            gather_after_apply=True,
+        )
+
+    assert module.fail_json.call_args.kwargs["changed"] is True
+    assert module.fail_json.call_args.kwargs["verification_context"] == "final-state"

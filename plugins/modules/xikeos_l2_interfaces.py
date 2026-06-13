@@ -45,10 +45,15 @@ options:
         description: Port VLAN ID (PVID) for the interface
         type: int
   state:
-    description: Desired state of the configuration
+    description:
+      - Desired state of the configuration.
+      - C(merged) - Create or update interface config as specified.
+      - C(replaced) - Replace existing interface config with specified config.
+      - C(gathered) - Gather interface state without changing the device.
+      - C(rendered) - Render CLI commands without connecting to the device.
     type: str
     default: merged
-    choices: ['merged', 'replaced']
+    choices: ['merged', 'replaced', 'gathered', 'rendered']
 author: clemon
 """
 
@@ -94,6 +99,10 @@ EXAMPLES = """
 """
 
 RETURN = """
+changed:
+  description: Whether the module changed the device configuration.
+  returned: always
+  type: bool
 before:
   description: The configuration prior to the module execution
   returned: when I(state) is C(merged) or C(replaced)
@@ -104,17 +113,26 @@ after:
   type: dict
 commands:
   description: The set of commands pushed to the device
-  returned: always
+  returned: when I(state) is C(merged), C(replaced), or C(rendered)
   type: list
   sample:
     - interface ethernet 0/0/1
     - switchport link-type access
     - switchport pvid 100
+gathered:
+  description: Interface state gathered from the device when I(state) is C(gathered).
+  returned: when I(state) is C(gathered)
+  type: dict
+rendered:
+  description: Rendered CLI commands when I(state) is C(rendered).
+  returned: when I(state) is C(rendered)
+  type: list
 """
 
 from ansible.module_utils.basic import AnsibleModule
+from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.l2_interfaces import L2InterfacesFacts
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config
-from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import run_resource_module_lifecycle
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import gather_with_error_boundary, run_resource_module_lifecycle
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -122,13 +140,6 @@ if TYPE_CHECKING:
 
 L2InterfaceConfig = dict[str, Any]
 L2InterfaceState = dict[str, L2InterfaceConfig]
-
-try:
-    from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.l2_interfaces import L2InterfacesFacts
-    HAS_FACTS = True
-except ImportError:
-    HAS_FACTS = False
-
 
 def parse_vlan_str(vlan_str: object) -> str | None:
     """Parse VLAN string like '10,20,30' or 'all' into a normalized format."""
@@ -238,14 +249,7 @@ def build_after_state(
 
 def gather_l2_interfaces(module: "AnsibleModuleType") -> L2InterfaceState:
     """Gather L2 interface facts required for idempotent diffing."""
-    if not HAS_FACTS:
-        module.fail_json(msg='L2 interface facts support is required for diffing')
-        return {}
-    try:
-        return L2InterfacesFacts(module).get_facts()
-    except Exception as exc:
-        module.fail_json(msg='failed to gather L2 interface facts: {0}'.format(exc))
-        return {}
+    return gather_with_error_boundary(module, lambda: L2InterfacesFacts(module).get_facts(), 'failed to gather L2 interface facts', 'l2_interfaces', {})
 
 
 def main() -> None:
@@ -267,7 +271,7 @@ def main() -> None:
             state=dict(
                 type='str',
                 default='merged',
-                choices=['merged', 'replaced'],
+                choices=['merged', 'replaced', 'gathered', 'rendered'],
             ),
         ),
         supports_check_mode=True,
@@ -283,7 +287,9 @@ def main() -> None:
         build_commands=build_lifecycle_commands,
         build_after=build_after_state,
         mutating_states=('merged', 'replaced'),
-        rendered_states=(),
+        gathered_states=('gathered',),
+        rendered_states=('rendered',),
+        rendered_current={},
         apply_config=load_config,
         gather_after_apply=True,
     )

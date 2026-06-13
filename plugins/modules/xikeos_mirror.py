@@ -13,6 +13,11 @@ module: xikeos_mirror
 short_description: Manage port mirroring on Xike OS switches
 version_added: "0.1.0"
 description:
+  - This module currently only supports C(state=rendered) to generate CLI
+    commands for mirror groups; it does not connect to or apply configuration
+    on the device.
+  - C(present) and C(absent) are documented for the future lifecycle but are
+    currently unsupported and fail when configuration is supplied.
   - Configure port mirroring (mirror groups) on Xike OS devices.
   - Add or remove source interfaces and destination interfaces for mirror groups.
 options:
@@ -51,8 +56,9 @@ options:
   state:
     description:
       - State of the mirror group configuration.
-      - C(present) - Creates or updates the mirror group.
-      - C(absent) - Removes the mirror group or specified source interfaces.
+      - C(rendered) - Generates CLI commands only.
+      - C(present) and C(absent) are currently unsupported and fail when
+        configuration is supplied.
     type: str
     choices: ['present', 'absent', 'rendered']
     default: present
@@ -60,7 +66,7 @@ author: clemon
 """
 
 EXAMPLES = """
-- name: Create a mirror group with source and destination
+- name: Render mirror group commands with source and destination
   c1emon.xikeos.xikeos_mirror:
     config:
       group_id: 1
@@ -70,41 +76,49 @@ EXAMPLES = """
         - name: ethernet 0/0/2
           direction: ingress
       destination_interface: ethernet 0/0/10
-    state: present
+    state: rendered
 
-- name: Add a CPU source to an existing mirror group
+- name: Render mirror group commands with a CPU source
   c1emon.xikeos.xikeos_mirror:
     config:
       group_id: 1
       source_interfaces:
         - name: cpu
           direction: both
-    state: present
+    state: rendered
 
-- name: Remove a specific source interface from a mirror group
+- name: Render mirror group commands with a source interface
   c1emon.xikeos.xikeos_mirror:
     config:
       group_id: 1
       source_interfaces:
         - name: ethernet 0/0/2
-    state: absent
+    state: rendered
 
-- name: Delete an entire mirror group
+- name: Render mirror group commands with a destination interface
   c1emon.xikeos.xikeos_mirror:
     config:
       group_id: 1
-    state: absent
+    state: rendered
 """
 
 RETURN = """
+changed:
+  description: Whether the module changed the device configuration.
+  returned: always
+  type: bool
 commands:
-  description: CLI commands sent to the device
+  description: CLI commands rendered for the device.
   returned: always
   type: list
   sample:
     - mirror group 1 source-interface ethernet 0/0/1 both
     - mirror group 1 source-interface ethernet 0/0/2 ingress
     - mirror group 1 destination-interface ethernet 0/0/10
+rendered:
+  description: Rendered CLI commands when I(state) is C(rendered).
+  returned: when I(state) is C(rendered)
+  type: list
 """
 
 from ansible.module_utils.basic import AnsibleModule

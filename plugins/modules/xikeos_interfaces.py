@@ -12,7 +12,7 @@ short_description: Manage Xike switch interfaces
 version_added: "0.1.0"
 description:
   - Configure Ethernet interfaces on Xike switches.
-  - Supports merged and replaced states.
+  - Supports merged, replaced, gathered, and rendered states.
 options:
   config:
     description: List of interface configurations
@@ -42,9 +42,14 @@ options:
         description: MTU size
         type: int
   state:
-    description: Desired state
+    description:
+      - Desired state.
+      - C(merged) - Create or update interface config as specified.
+      - C(replaced) - Replace existing interface config with specified config.
+      - C(gathered) - Gather interface state without changing the device.
+      - C(rendered) - Render CLI commands without connecting to the device.
     type: str
-    choices: ['merged', 'replaced']
+    choices: ['merged', 'replaced', 'gathered', 'rendered']
     default: merged
 author: clemon
 """
@@ -72,9 +77,13 @@ EXAMPLES = """
 """
 
 RETURN = """
+changed:
+  description: Whether the module changed the device configuration.
+  returned: always
+  type: bool
 commands:
   description: CLI commands sent to the device
-  returned: always
+  returned: when I(state) is C(merged), C(replaced), or C(rendered)
   type: list
   sample:
     - interface ethernet 0/0/1
@@ -83,12 +92,28 @@ commands:
     - duplex full
     - mtu 1500
     - no shutdown
+before:
+  description: The configuration prior to the module execution.
+  returned: when I(state) is C(merged) or C(replaced)
+  type: dict
+after:
+  description: The configuration after the module execution.
+  returned: when I(state) is C(merged) or C(replaced)
+  type: dict
+gathered:
+  description: Interface state gathered from the device when I(state) is C(gathered).
+  returned: when I(state) is C(gathered)
+  type: dict
+rendered:
+  description: Rendered CLI commands when I(state) is C(rendered).
+  returned: when I(state) is C(rendered)
+  type: list
 """
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.interfaces import InterfacesFacts
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config
-from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import run_resource_module_lifecycle
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import gather_with_error_boundary, run_resource_module_lifecycle
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -190,11 +215,7 @@ def build_after_state(
 
 def gather_interfaces(module: "AnsibleModuleType") -> InterfaceState:
     """Gather base interface facts required for idempotent diffing."""
-    try:
-        return InterfacesFacts(module).get_facts()
-    except Exception as exc:
-        module.fail_json(msg='failed to gather interface facts: {0}'.format(exc))
-        return {}
+    return gather_with_error_boundary(module, lambda: InterfacesFacts(module).get_facts(), 'failed to gather interface facts', 'interfaces', {})
 
 
 def main() -> None:
@@ -214,7 +235,7 @@ def main() -> None:
             ),
             state=dict(
                 type='str',
-                choices=['merged', 'replaced'],
+                choices=['merged', 'replaced', 'gathered', 'rendered'],
                 default='merged',
             ),
         ),
@@ -231,7 +252,9 @@ def main() -> None:
         build_commands=build_commands,
         build_after=build_after_state,
         mutating_states=('merged', 'replaced'),
-        rendered_states=(),
+        gathered_states=('gathered',),
+        rendered_states=('rendered',),
+        rendered_current={},
         apply_config=load_config,
         gather_after_apply=True,
     )

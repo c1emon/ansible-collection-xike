@@ -32,7 +32,9 @@ options:
         type: str
         required: false
       state:
-        description: VLAN state (active/suspend)
+        description:
+          - VLAN state (active/suspend).
+          - C(suspend) is accepted in the configuration model, but mutating states C(merged) and C(replaced) do not render suspended VLAN configuration items and will fail if one is requested.
         type: str
         choices: ['active', 'suspend']
         default: active
@@ -43,8 +45,9 @@ options:
       - C(replaced) - Replaces existing VLAN configuration with specified config.
       - C(deleted) - Deletes VLANs specified in config.
       - C(gathered) - Gathers VLAN state without changing the device.
+      - C(rendered) - Renders CLI commands without connecting to the device.
     type: str
-    choices: ['merged', 'replaced', 'deleted', 'gathered']
+    choices: ['merged', 'replaced', 'deleted', 'gathered', 'rendered']
     default: merged
 author: clemon
 """
@@ -82,27 +85,43 @@ EXAMPLES = """
 """
 
 RETURN = """
+changed:
+  description: Whether the module changed the device configuration.
+  returned: always
+  type: bool
 commands:
   description: List of commands sent to the device
-  returned: always
+  returned: when I(state) is C(merged), C(replaced), C(deleted), or C(rendered)
   type: list
   sample:
     - vlan 100
     - description DATA
     - vlan 200
     - description VOICE
+before:
+  description: The configuration prior to the module execution.
+  returned: when I(state) is C(merged), C(replaced), or C(deleted)
+  type: list
+after:
+  description: The configuration after the module execution.
+  returned: when I(state) is C(merged), C(replaced), or C(deleted)
+  type: list
 gathered:
   description: VLAN state gathered from the device when I(state=gathered)
   returned: when state is gathered
   type: list
   elements: dict
+rendered:
+  description: Rendered CLI commands when I(state) is C(rendered).
+  returned: when I(state) is C(rendered)
+  type: list
 """
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.common.text.converters import to_text
 from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.vlans import parse_vlan
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config, run_commands
-from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import run_resource_module_lifecycle
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import gather_with_error_boundary, run_resource_module_lifecycle
 
 
 def vlan_id_range(vlan_ids: list[int]) -> str:
@@ -161,11 +180,14 @@ def get_commands(config: list[dict[str, Any]], state: str, current: Optional[lis
 
     if state == "merged":
         for vlan in config:
+            requested_name = vlan.get("name")
             vlan = _normalize_vlan(vlan)
             vlan_id = vlan["vlan_id"]
-            name = vlan.get("name", "")
+            name = requested_name or ""
             existing = current_by_id.get(vlan_id)
-            if existing and existing.get("name", "") == name and existing.get("state", "active") == vlan.get("state", "active"):
+            name_matches = True if not name else existing and existing.get("name", "") == name
+            state_matches = existing and existing.get("state", "active") == vlan.get("state", "active")
+            if existing and name_matches and state_matches:
                 continue
 
             commands.append(f"vlan {vlan_id}")
@@ -179,11 +201,14 @@ def get_commands(config: list[dict[str, Any]], state: str, current: Optional[lis
             if vlan_id != 1:
                 commands.append(f"no vlan {vlan_id}")
         for vlan in config:
+            requested_name = vlan.get("name")
             vlan = _normalize_vlan(vlan)
             vlan_id = vlan["vlan_id"]
-            name = vlan.get("name", "")
+            name = requested_name or ""
             existing = current_by_id.get(vlan_id)
-            if existing and existing.get("name", "") == name and existing.get("state", "active") == vlan.get("state", "active"):
+            name_matches = True if not name else existing and existing.get("name", "") == name
+            state_matches = existing and existing.get("state", "active") == vlan.get("state", "active")
+            if existing and name_matches and state_matches:
                 continue
             commands.append(f"vlan {vlan_id}")
             if name:
@@ -222,16 +247,22 @@ def validate_vlan_request(module: Any, config: list[dict[str, Any]], state: str)
 
 def gather_vlans(module: Any) -> list[dict[str, Any]]:
     """Collect VLAN state from the device and normalize parsed records."""
-    try:
+    def _gather() -> list[dict[str, Any]]:
         stdout = run_commands(module, ["show vlan"], check_rc=True)
-    except Exception as exc:
-        module.fail_json(msg="failed to gather VLAN state with 'show vlan': %s" % to_text(exc))
-        return []
-    output = to_text(stdout[0] if stdout else "", errors="surrogate_or_strict")
-    return [
-        _normalize_vlan(vlan)
-        for vlan in parse_vlan(output, textfsm_templates=module.params.get("_textfsm_templates"))
-    ]
+        output = to_text(stdout[0] if stdout else "", errors="surrogate_or_strict")
+        return [
+            _normalize_vlan(vlan)
+            for vlan in parse_vlan(output, textfsm_templates=module.params.get("_textfsm_templates"))
+        ]
+
+    return gather_with_error_boundary(
+        module,
+        _gather,
+        "failed to gather VLAN state with 'show vlan'",
+        "vlans",
+        [],
+        include_exception_in_msg=True,
+    )
 
 
 def build_after_state(before: list[dict[str, Any]], desired: list[dict[str, Any]], state: str) -> list[dict[str, Any]]:
@@ -243,6 +274,8 @@ def build_after_state(before: list[dict[str, Any]], desired: list[dict[str, Any]
             after = {vlan_id: vlan for vlan_id, vlan in after.items() if vlan_id in desired_ids or vlan_id == 1}
         for vlan in desired:
             normalized = _normalize_vlan(vlan)
+            if not vlan.get("name") and normalized["vlan_id"] in after:
+                normalized["name"] = after[normalized["vlan_id"]].get("name", "")
             after[normalized["vlan_id"]] = normalized
     elif state == "deleted":
         for vlan in desired:
@@ -264,7 +297,7 @@ def main() -> None:
                 name=dict(
                     type="str",
                     required=False,
-                    default="",
+                    default=None,
                 ),
                 state=dict(
                     type="str",
@@ -275,7 +308,7 @@ def main() -> None:
         ),
         state=dict(
             type="str",
-            choices=["merged", "replaced", "deleted", "gathered"],
+            choices=["merged", "replaced", "deleted", "gathered", "rendered"],
             default="merged",
         ),
         _textfsm_templates=dict(
@@ -303,7 +336,7 @@ def main() -> None:
         build_after=build_after_state,
         mutating_states=("merged", "replaced", "deleted"),
         gathered_states=("gathered",),
-        rendered_states=(),
+        rendered_states=("rendered",),
         apply_config=load_config,
     )
 

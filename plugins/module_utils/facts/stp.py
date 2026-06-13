@@ -10,11 +10,6 @@ from typing import Any
 
 import re
 
-from ansible_collections.c1emon.xikeos.plugins.module_utils.xikeos import (
-    COMMAND_MAP,
-)
-
-
 def parse_stp_brief(output: str | None) -> dict[str, Any]:
     """
     Parse 'show stp interface brief' output and return STP facts.

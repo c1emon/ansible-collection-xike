@@ -10,6 +10,26 @@ from ansible.module_utils.common.collections import is_sequence
 from ansible_collections.ansible.netcommon.plugins.plugin_utils.cliconf_base import CliconfBase
 
 
+DOCUMENTATION = """
+author: clemon
+name: xikeos
+short_description: Use Xike OS cliconf to run commands on Xike switches
+description:
+  - This cliconf plugin provides the Xike OS command, configuration, and facts transport used with C(ansible.netcommon.network_cli).
+  - Use with C(ansible_network_os=c1emon.xikeos.xikeos).
+version_added: "0.1.0"
+options:
+  config_commands:
+    description:
+      - Commands used by the cliconf plugin to enter and leave configuration mode.
+    default:
+      - configure terminal
+      - end
+    type: list
+    elements: str
+"""
+
+
 def _to_list(value: Any) -> list[Any]:
     if value is None:
         return []
@@ -29,7 +49,7 @@ class Cliconf(CliconfBase):
             check_all=check_all,
         )
 
-    def get_config(self, source: str = "running", flags: Any = None, format: Optional[str] = None) -> str:
+    def get_config(self, source: str = "running", flags: Any = None, format: Optional[str] = None) -> str: # type: ignore
         if source not in ("running", "startup"):
             raise ValueError("fetching configuration from %s is not supported" % source)
         if format not in (None, "text"):
@@ -40,7 +60,7 @@ class Cliconf(CliconfBase):
             command = "%s %s" % (command, flag_text)
         return self.send_command(command)
 
-    def edit_config(self, candidate: Any = None, commit: bool = True, replace: Any = None, diff: bool = False, comment: Optional[str] = None) -> str:
+    def edit_config(self, candidate: Any = None, commit: bool = True, replace: Any = None, diff: bool = False, comment: Optional[str] = None) -> str: # type: ignore
         if replace:
             raise ValueError("replace config is not supported on Xike OS")
 
@@ -62,7 +82,7 @@ class Cliconf(CliconfBase):
                 self.send_command("end")
         return json.dumps({"diff": "", "request": requests, "response": responses})
 
-    def get_device_info(self) -> dict[str, Any]:
+    def get_device_info(self) -> dict[str, Any]: # type: ignore
         info = {"network_os": "xikeos"}
         try:
             output = to_text(self.get("show version"), errors="surrogate_or_strict")
@@ -82,7 +102,7 @@ class Cliconf(CliconfBase):
             info["network_os_hostname"] = hostname.group(1)
         return info
 
-    def get_capabilities(self) -> str:
+    def get_capabilities(self) -> str: # type: ignore
         result = super(Cliconf, self).get_capabilities()
         if isinstance(result, str):
             result = json.loads(result)

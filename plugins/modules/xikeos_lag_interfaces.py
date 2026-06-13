@@ -38,10 +38,15 @@ options:
         type: str
         choices: ['active', 'passive']
   state:
-    description: Desired state of the configuration
+    description:
+      - Desired state of the configuration.
+      - C(merged) - Create or update interface config as specified.
+      - C(replaced) - Replace existing interface config with specified config.
+      - C(gathered) - Gather interface state without changing the device.
+      - C(rendered) - Render CLI commands without connecting to the device.
     type: str
     default: merged
-    choices: ['merged', 'replaced']
+    choices: ['merged', 'replaced', 'gathered', 'rendered']
 author: clemon
 """
 
@@ -80,6 +85,10 @@ EXAMPLES = """
 """
 
 RETURN = """
+changed:
+  description: Whether the module changed the device configuration.
+  returned: always
+  type: bool
 before:
   description: The configuration prior to the module execution
   returned: when I(state) is C(merged) or C(replaced)
@@ -90,18 +99,27 @@ after:
   type: dict
 commands:
   description: The set of commands pushed to the device
-  returned: always
+  returned: when I(state) is C(merged), C(replaced), or C(rendered)
   type: list
   sample:
     - interface eth-trunk 1
     - link-aggregation mode static
     - link-aggregation members ethernet 0/0/1
     - link-aggregation members ethernet 0/0/2
+gathered:
+  description: LAG interface state gathered from the device when I(state) is C(gathered).
+  returned: when I(state) is C(gathered)
+  type: dict
+rendered:
+  description: Rendered CLI commands when I(state) is C(rendered).
+  returned: when I(state) is C(rendered)
+  type: list
 """
 
 from ansible.module_utils.basic import AnsibleModule
+from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.lag_interfaces import LagInterfacesFacts
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config
-from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import run_resource_module_lifecycle
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import gather_with_error_boundary, run_resource_module_lifecycle
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -109,15 +127,6 @@ if TYPE_CHECKING:
 
 LagInterfaceConfig = dict[str, Any]
 LagInterfaceState = dict[str, LagInterfaceConfig]
-
-try:
-    from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.lag_interfaces import (
-        LagInterfacesFacts,
-    )
-    HAS_FACTS = True
-except ImportError:
-    HAS_FACTS = False
-
 
 def _extract_trunk_id(trunk_name: str) -> str:
     """Extract numeric ID from trunk name like 'eth-trunk 1' -> 1."""
@@ -221,14 +230,7 @@ def build_after_state(
 
 def gather_lag_interfaces(module: "AnsibleModuleType") -> LagInterfaceState:
     """Gather LAG interface facts required for idempotent diffing."""
-    if not HAS_FACTS:
-        module.fail_json(msg='LAG interface facts support is required for diffing')
-        return {}
-    try:
-        return LagInterfacesFacts(module).get_facts()
-    except Exception as exc:
-        module.fail_json(msg='failed to gather LAG interface facts: {0}'.format(exc))
-        return {}
+    return gather_with_error_boundary(module, lambda: LagInterfacesFacts(module).get_facts(), 'failed to gather LAG interface facts', 'lag_interfaces', {})
 
 
 def main() -> None:
@@ -251,7 +253,7 @@ def main() -> None:
             state=dict(
                 type='str',
                 default='merged',
-                choices=['merged', 'replaced'],
+                choices=['merged', 'replaced', 'gathered', 'rendered'],
             ),
         ),
         supports_check_mode=True,
@@ -268,7 +270,9 @@ def main() -> None:
         build_commands=build_lifecycle_commands,
         build_after=build_after_state,
         mutating_states=('merged', 'replaced'),
-        rendered_states=(),
+        gathered_states=('gathered',),
+        rendered_states=('rendered',),
+        rendered_current={},
         apply_config=load_config,
         gather_after_apply=True,
     )

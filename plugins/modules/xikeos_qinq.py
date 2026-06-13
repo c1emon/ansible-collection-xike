@@ -13,6 +13,12 @@ module: xikeos_qinq
 short_description: Manage QinQ configuration on Xike OS devices
 version_added: "0.1.0"
 description:
+  - This module currently only supports C(state=rendered) to generate CLI
+    commands for QinQ (VLAN stacking); it does not connect to or apply
+    configuration on the device.
+  - Mutating lifecycle states such as C(merged), C(replaced), and C(deleted)
+    are present in the argument schema for future support, but they are
+    currently unsupported and fail when configuration is supplied.
   - This module provides declarative management of QinQ (VLAN stacking)
     on Xike OS devices.
   - Supports configuring QinQ mode, inner/outer TPID, VLAN insert,
@@ -89,9 +95,9 @@ options:
   state:
     description:
       - State of the QinQ configuration.
-      - C(merged) - Creates or updates QinQ settings as specified.
-      - C(replaced) - Replaces existing QinQ configuration with specified config.
-      - C(deleted) - Removes QinQ configuration.
+      - C(rendered) - Generates CLI commands only.
+      - C(merged), C(replaced), and C(deleted) are currently unsupported and
+        fail when configuration is supplied.
     type: str
     choices: ['merged', 'replaced', 'deleted', 'rendered']
     default: merged
@@ -99,15 +105,15 @@ author: clemon
 """
 
 EXAMPLES = """
-- name: Set QinQ mode to customer with TPIDs
+- name: Render QinQ commands for customer mode with TPIDs
   c1emon.xikeos.xikeos_qinq:
     config:
       mode: customer
       inner_tpid: "0x8100"
       outer_tpid: "0x88a8"
-    state: merged
+    state: rendered
 
-- name: Configure VLAN insert rules
+- name: Render QinQ commands for VLAN insert rules
   c1emon.xikeos.xikeos_qinq:
     config:
       vlan_inserts:
@@ -118,17 +124,17 @@ EXAMPLES = """
           end_vlan: 399
           service_vlan: 600
           priority: 5
-    state: merged
+    state: rendered
 
-- name: Configure VLAN pass-through rules
+- name: Render QinQ commands for VLAN pass-through rules
   c1emon.xikeos.xikeos_qinq:
     config:
       vlan_pass_throughs:
         - start_vlan: 10
           end_vlan: 20
-    state: merged
+    state: rendered
 
-- name: Configure VLAN swap rules
+- name: Render QinQ commands for VLAN swap rules
   c1emon.xikeos.xikeos_qinq:
     config:
       vlan_swaps:
@@ -136,17 +142,16 @@ EXAMPLES = """
           end_vlan: 199
           swap_vlan: 900
           priority: 3
-    state: merged
-
-- name: Delete QinQ configuration
-  c1emon.xikeos.xikeos_qinq:
-    config: {}
-    state: deleted
+    state: rendered
 """
 
 RETURN = """
+changed:
+  description: Whether the module changed the device configuration.
+  returned: always
+  type: bool
 commands:
-  description: List of commands sent to the device
+  description: List of commands rendered for the device.
   returned: always
   type: list
   sample:
@@ -154,6 +159,10 @@ commands:
     - qinq inner-tpid 0x8100
     - qinq outer-tpid 0x88a8
     - vlan insert 100 200 500
+rendered:
+  description: Rendered CLI commands when I(state) is C(rendered).
+  returned: when I(state) is C(rendered)
+  type: list
 """
 
 from ansible.module_utils.basic import AnsibleModule
