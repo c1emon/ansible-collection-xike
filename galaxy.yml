@@ -14,6 +14,7 @@ documentation: https://github.com/c1emon/ansible-collection-xike
 homepage: https://github.com/c1emon/ansible-collection-xike
 issues: https://github.com/c1emon/ansible-collection-xike/issues
 tags:
+  - networking
   - xike
   - network
   - switch

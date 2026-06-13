@@ -8,6 +8,7 @@ __metaclass__ = type
 from typing import Any, Optional, TYPE_CHECKING
 
 from ansible.module_utils.common.text.converters import to_text
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.errors import XikeOSFactsError
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.xikeos import run_commands
 
 if TYPE_CHECKING:
@@ -35,7 +36,7 @@ class LagInterfacesFacts(object):
             output = to_text(stdout[0] if stdout else '', errors='surrogate_or_strict')
             self.facts = parse_lag_config(output)
         except Exception as exc:
-            self.module.fail_json(msg='failed to gather LAG interface facts: {0}'.format(to_text(exc)))
+            raise XikeOSFactsError('failed to gather LAG interface facts', detail=to_text(exc), context='lag_interfaces') from exc
 
     def get_facts(self) -> dict[str, LagState]:
         """Return gathered facts."""

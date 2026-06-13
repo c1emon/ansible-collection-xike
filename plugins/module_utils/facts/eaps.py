@@ -10,11 +10,6 @@ from typing import Any
 
 import re
 
-from ansible_collections.c1emon.xikeos.plugins.module_utils.xikeos import (
-    COMMAND_MAP,
-)
-
-
 def parse_eaps_brief(output: str | None) -> dict[str, list[dict[str, Any]]]:
     """
     Parse 'show eaps' output and return EAPS facts.

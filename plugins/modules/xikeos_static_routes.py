@@ -25,15 +25,15 @@ options:
       destination:
         description:
           - Network destination address.
-          - For IPv4: dotted-decimal format (e.g., '192.168.1.0').
-          - For IPv6: standard IPv6 format (e.g., '2001:db8::').
+          - "For IPv4: dotted-decimal format (e.g., '192.168.1.0')."
+          - "For IPv6: standard IPv6 format (e.g., '2001:db8::')."
         type: str
         required: true
       mask:
         description:
           - Subnet mask or prefix length.
-          - For IPv4: dotted-decimal mask (e.g., '255.255.255.0') or CIDR prefix (e.g., '24').
-          - For IPv6: prefix length as string (e.g., '64').
+          - "For IPv4: dotted-decimal mask (e.g., '255.255.255.0') or CIDR prefix (e.g., '24')."
+          - "For IPv6: prefix length as string (e.g., '64')."
         type: str
         required: true
       next_hop:
@@ -44,7 +44,7 @@ options:
       distance:
         description:
           - Administrative distance for the route.
-          - Valid range: 1-255.
+          - "Valid range: 1-255."
           - Default is 1 for static routes.
         type: int
         default: 1
@@ -164,7 +164,7 @@ import ipaddress
 from ansible.module_utils.basic import AnsibleModule
 from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.static_routes import StaticRoutesFacts
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config
-from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import run_resource_module_lifecycle
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import gather_with_error_boundary, run_resource_module_lifecycle
 from typing import Any
 
 RouteConfig = dict[str, Any]
@@ -418,12 +418,11 @@ def build_after_state(
 
 def gather_static_routes(module: Any) -> list[RouteConfig]:
     """Gather static route facts required for idempotent diffing."""
-    try:
+    def _gather() -> list[RouteConfig]:
         facts = StaticRoutesFacts(module)
         return facts.facts.get('static_routes', [])
-    except Exception as exc:
-        module.fail_json(msg='failed to gather static route facts: {0}'.format(exc))
-        return []
+
+    return gather_with_error_boundary(module, _gather, 'failed to gather static route facts', 'static_routes', [])
 
 
 def prefix_to_ipv4_mask(prefix_len: int) -> str:
@@ -443,8 +442,7 @@ def ipv4_mask_to_prefix(mask: str) -> int:
         parts = mask.split('.')
         if len(parts) != 4:
             return -1
-        bits = sum(int(p).bit_length() for p in parts)
-        # More accurate: convert to binary and count
+        # Convert to binary and count.
         binary = 0
         for p in parts:
             binary = (binary << 8) | int(p)

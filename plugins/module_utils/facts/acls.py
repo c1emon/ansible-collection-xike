@@ -9,6 +9,7 @@ import re
 from typing import Any, Optional, TYPE_CHECKING
 
 from ansible.module_utils.common.text.converters import to_text
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.errors import XikeOSFactsError
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.xikeos import run_commands
 
 if TYPE_CHECKING:
@@ -44,7 +45,7 @@ class AclsFacts(object):
             self.facts['acls'] = parse_access_list_config(config_output)
             self.facts['acl_bindings'] = parse_access_list_runtime(runtime_output)
         except Exception as exc:
-            self.module.fail_json(msg="failed to gather ACL facts: {0}".format(to_text(exc)))
+            raise XikeOSFactsError('failed to gather ACL facts', detail=to_text(exc), context='acls') from exc
 
 
 def parse_access_list_config(output: str) -> list[ACLRecord]:

@@ -20,6 +20,7 @@ from ansible_collections.c1emon.xikeos.plugins.modules.xikeos_l3_interfaces impo
 from ansible_collections.c1emon.xikeos.plugins.modules.xikeos_lag_interfaces import gather_lag_interfaces
 from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.static_routes import StaticRoutesFacts
 from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.acls import AclsFacts
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.errors import XikeOSError, XikeOSFactsError
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.xikeos import run_commands, get_config
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.safety import redact_text, redact_value
 
@@ -105,11 +106,17 @@ def gather_device_facts(module: AnsibleModule, subsets: list[str]) -> dict[str, 
         try:
             stdout = run_commands(module, ["show version"], check_rc=True) or []
             facts.update(_parse_show_version(to_text(stdout[0] if stdout else "", errors="surrogate_or_strict")))
+        except XikeOSError as exc:
+            raise XikeOSFactsError("failed to gather minimum device facts", detail=getattr(exc, "detail", None), commands=getattr(exc, "commands", None), context="device") from exc
         except Exception as exc:
-            module.fail_json(msg="failed to gather minimum device facts: {0}".format(to_text(exc)))
-            return {}
+            raise XikeOSFactsError("failed to gather minimum device facts", detail=to_text(exc), context="device") from exc
     if "config" in subsets:
-        facts["ansible_net_config"] = redact_text(get_config(module, source="running"))
+        try:
+            facts["ansible_net_config"] = redact_text(get_config(module, source="running"))
+        except XikeOSError as exc:
+            raise XikeOSFactsError("failed to gather config facts", detail=getattr(exc, "detail", None), commands=getattr(exc, "commands", None), context="config") from exc
+        except Exception as exc:
+            raise XikeOSFactsError("failed to gather config facts", detail=to_text(exc), context="config") from exc
     facts["ansible_net_gather_subset"] = subsets # type: ignore
     return facts
 
@@ -127,20 +134,25 @@ def gather_resource_facts(module: AnsibleModule, resources: list[str]) -> dict[s
     """Gather resource facts by reusing collection parser/module contracts."""
     gathered: dict[str, Any] = {}
     for resource in resources:
-        if resource == "vlans":
-            gathered[resource] = gather_vlans(module)
-        elif resource == "interfaces":
-            gathered[resource] = _dict_values_with_names(gather_interfaces(module))
-        elif resource == "l2_interfaces":
-            gathered[resource] = _dict_values_with_names(gather_l2_interfaces(module))
-        elif resource == "l3_interfaces":
-            gathered[resource] = _dict_values_with_names(gather_l3_interfaces(module))
-        elif resource == "lag_interfaces":
-            gathered[resource] = _dict_values_with_names(gather_lag_interfaces(module))
-        elif resource == "static_routes":
-            gathered[resource] = StaticRoutesFacts(module).facts.get("static_routes", [])
-        elif resource == "acls":
-            gathered[resource] = AclsFacts(module).facts.get("acls", [])
+        try:
+            if resource == "vlans":
+                gathered[resource] = gather_vlans(module)
+            elif resource == "interfaces":
+                gathered[resource] = _dict_values_with_names(gather_interfaces(module))
+            elif resource == "l2_interfaces":
+                gathered[resource] = _dict_values_with_names(gather_l2_interfaces(module))
+            elif resource == "l3_interfaces":
+                gathered[resource] = _dict_values_with_names(gather_l3_interfaces(module))
+            elif resource == "lag_interfaces":
+                gathered[resource] = _dict_values_with_names(gather_lag_interfaces(module))
+            elif resource == "static_routes":
+                gathered[resource] = StaticRoutesFacts(module).facts.get("static_routes", [])
+            elif resource == "acls":
+                gathered[resource] = AclsFacts(module).facts.get("acls", [])
+        except XikeOSError as exc:
+            raise XikeOSFactsError("failed to gather resource facts", detail=getattr(exc, "detail", None), commands=getattr(exc, "commands", None), context=resource) from exc
+        except Exception as exc:
+            raise XikeOSFactsError("failed to gather resource facts", detail=to_text(exc), context=resource) from exc
     return gathered
 
 
@@ -162,10 +174,22 @@ def main() -> None:
         module.fail_json(msg="unsupported facts selector", invalid_subsets=invalid_subsets, invalid_resources=invalid_resources)
         return
 
-    ansible_facts = gather_device_facts(module, subsets)
-    ansible_facts["ansible_net_gather_network_resources"] = resources
-    if resources:
-        ansible_facts["ansible_network_resources"] = gather_resource_facts(module, resources)
+    try:
+        ansible_facts = gather_device_facts(module, subsets)
+        ansible_facts["ansible_net_gather_network_resources"] = resources
+        if resources:
+            ansible_facts["ansible_network_resources"] = gather_resource_facts(module, resources)
+    except XikeOSFactsError as exc:
+        module.fail_json(
+            msg=str(exc),
+            error=str(exc),
+            detail=getattr(exc, "detail", None),
+            context=getattr(exc, "context", None),
+            commands=getattr(exc, "commands", None),
+            gather_subset=subsets,
+            gather_network_resources=resources,
+        )
+        return
     module.exit_json(changed=False, ansible_facts=redact_value(ansible_facts))
 
 

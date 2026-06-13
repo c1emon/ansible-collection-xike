@@ -7,11 +7,6 @@ from typing import Any
 
 import re
 
-from ansible_collections.c1emon.xikeos.plugins.module_utils.xikeos import (
-    COMMAND_MAP,
-)
-
-
 def _parse_port_spec(text: str | None) -> dict[str, str] | None:
     """Parse a port spec string like 'eth 0/0/1' or 'eth-trunk 1' into a dict."""
     if not text:

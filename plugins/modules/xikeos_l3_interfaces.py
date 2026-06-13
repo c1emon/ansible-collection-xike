@@ -107,7 +107,7 @@ commands:
 from ansible.module_utils.basic import AnsibleModule
 from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.l3_interfaces import L3InterfacesFacts
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config
-from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import run_resource_module_lifecycle
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import gather_with_error_boundary, run_resource_module_lifecycle
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -205,11 +205,7 @@ def build_after_state(
 
 def gather_l3_interfaces(module: "AnsibleModuleType") -> L3InterfaceState:
     """Gather L3 interface facts required for idempotent diffing."""
-    try:
-        return L3InterfacesFacts(module).get_facts()
-    except Exception as exc:
-        module.fail_json(msg='failed to gather L3 interface facts: {0}'.format(exc))
-        return {}
+    return gather_with_error_boundary(module, lambda: L3InterfacesFacts(module).get_facts(), 'failed to gather L3 interface facts', 'l3_interfaces', {})
 
 
 def main() -> None:

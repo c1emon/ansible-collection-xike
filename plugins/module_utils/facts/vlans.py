@@ -11,11 +11,6 @@ from typing import Any, Sequence
 from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.textfsm_parser import (
     parse_textfsm_template,
 )
-from ansible_collections.c1emon.xikeos.plugins.module_utils.xikeos import (
-    COMMAND_MAP,
-)
-
-
 SHOW_VLAN_TEMPLATE = "show_vlan.textfsm"
 
 
