@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
-### Requirement: Lifecycle modules may use reconciler-planned command diffs
-Declarative resource modules MAY use the internal reconciler to compute command diffs and simulated after-state while preserving the standard lifecycle for gather, check mode, apply, and post-apply verification.
+### Requirement: Lifecycle modules use reconciler-planned command diffs
+Declarative resource modules that adopt the internal reconciler SHALL use it to compute command diffs and simulated after-state while preserving the standard lifecycle for gather, check mode, apply, and post-apply verification.
 
 #### Scenario: Reconciler-planned check mode does not apply configuration
 - **WHEN** a reconciler-backed resource module runs in check mode with pending operations

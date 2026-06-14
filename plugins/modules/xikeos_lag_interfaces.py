@@ -34,14 +34,16 @@ options:
         type: list
         elements: str
       lacp_mode:
-        description: LACP mode (only valid when mode is dynamic)
+        description:
+          - LACP mode (only valid when mode is dynamic).
+          - Set to C(null) to remove an existing LACP mode configuration.
         type: str
         choices: ['active', 'passive']
   state:
     description:
       - Desired state of the configuration.
-      - C(merged) - Create or update interface config as specified.
-      - C(replaced) - Replace existing interface config with specified config.
+      - C(merged) - Add configured members and scalar fields without removing existing members.
+      - C(replaced) - Synchronize explicitly declared fields for the listed eth-trunks only.
       - C(gathered) - Gather interface state without changing the device.
       - C(rendered) - Render CLI commands without connecting to the device.
     type: str
@@ -72,7 +74,7 @@ EXAMPLES = """
           - "0/0/4"
     state: merged
 
-- name: Replace eth-trunk configuration
+- name: Replace eth-trunk 1 mode, LACP, and members
   c1emon.xikeos.xikeos_lag_interfaces:
     config:
       - name: eth-trunk 1
@@ -118,8 +120,16 @@ rendered:
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.lag_interfaces import LagInterfacesFacts
-from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import gather_with_error_boundary, run_resource_module_lifecycle
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.reconcile import (
+    FieldPolicy,
+    Operation,
+    ReconciliationInputError,
+    ResourcePolicy,
+    apply_operations_to_state,
+    plan_operations,
+)
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -127,6 +137,71 @@ if TYPE_CHECKING:
 
 LagInterfaceConfig = dict[str, Any]
 LagInterfaceState = dict[str, LagInterfaceConfig]
+
+LAG_POLICY = ResourcePolicy(
+    identity=("name",),
+    fields={
+        "mode": FieldPolicy(kind="scalar", removal_supported=False),
+        "lacp_mode": FieldPolicy(kind="scalar", removal_supported=True),
+        "members": FieldPolicy(kind="set", identity=()),
+    },
+)
+
+
+def _build_lag_state(config_list: list[LagInterfaceConfig]) -> LagInterfaceState:
+    desired: LagInterfaceState = {}
+    for config in config_list:
+        trunk_name = config["name"]
+        if trunk_name in desired:
+            raise ReconciliationInputError("duplicate LAG interface config: {0}".format(trunk_name))
+        desired[trunk_name] = dict(config)
+    return desired
+
+
+def _ensure_lag_names(state: LagInterfaceState) -> LagInterfaceState:
+    return {
+        name: dict(config, name=config.get("name", name))
+        for name, config in state.items()
+    }
+
+
+def _render_lag_operations(operations: list[Operation]) -> list[str]:
+    commands: list[str] = []
+    current_resource = None
+
+    for operation in operations:
+        if operation.resource != current_resource:
+            commands.append("interface {0}".format(operation.resource[0][1]))
+            current_resource = operation.resource
+
+        if operation.field == "mode" and operation.action == "set_field":
+            commands.append("link-aggregation mode {0}".format(operation.value))
+            continue
+        if operation.field == "mode":
+            raise ReconciliationInputError("unsupported LAG operation: {0}".format(operation.action))
+
+        if operation.field == "lacp_mode":
+            if operation.action == "set_field":
+                commands.append("lacp mode {0}".format(operation.value))
+            elif operation.action == "unset_field":
+                commands.append("no lacp mode")
+            else:
+                raise ReconciliationInputError("unsupported LAG operation: {0}".format(operation.action))
+            continue
+
+        if operation.field == "members":
+            member = operation.value
+            if operation.action == "add_item":
+                commands.append("link-aggregation members ethernet {0}".format(member))
+            elif operation.action == "remove_item":
+                commands.append("no link-aggregation members ethernet {0}".format(member))
+            else:
+                raise ReconciliationInputError("unsupported LAG operation: {0}".format(operation.action))
+            continue
+
+        raise ReconciliationInputError("unsupported LAG field: {0}".format(operation.field))
+
+    return commands
 
 def _extract_trunk_id(trunk_name: str) -> str:
     """Extract numeric ID from trunk name like 'eth-trunk 1' -> 1."""
@@ -138,7 +213,10 @@ def build_trunk_commands(
     config: LagInterfaceConfig,
     existing_config: LagInterfaceState,
 ) -> list[str]:
-    """Build CLI commands for a single eth-trunk config entry.
+    """Build replaced-style CLI commands for a single eth-trunk config entry.
+
+    This preserves the legacy direct helper behavior. Lifecycle execution uses
+    build_lifecycle_commands() so the requested state controls reconciliation.
 
     Args:
         config: dict with keys: name, mode, members, lacp_mode
@@ -147,57 +225,9 @@ def build_trunk_commands(
     Returns:
         list of CLI command strings (empty if no changes needed)
     """
-    commands: list[str] = []
-    trunk_name = config['name']
-    trunk_id = _extract_trunk_id(trunk_name)
-    existing = existing_config.get(trunk_name, {})
-
-    existing_mode = existing.get('mode')
-    existing_members = existing.get('members', [])
-    existing_lacp = existing.get('lacp_mode')
-
-    mode = config.get('mode')
-    members = config.get('members', [])
-    lacp_mode = config.get('lacp_mode')
-
-    # Determine if any changes are needed
-    mode_changed = mode is not None and mode != existing_mode
-    members_set_changed = set(members or []) != set(existing_members or [])
-    lacp_changed = lacp_mode is not None and lacp_mode != existing_lacp
-
-    if not mode_changed and not members_set_changed and not lacp_changed:
-        return []
-
-    # Enter eth-trunk interface mode
-    commands.append('interface eth-trunk {0}'.format(trunk_id))
-
-    # Set link-aggregation mode
-    if mode_changed:
-        commands.append('link-aggregation mode {0}'.format(mode))
-
-    # Add members (new additions only)
-    if members_set_changed:
-        desired = set(members or [])
-        current = set(existing_members or [])
-
-        # Members to add
-        to_add = desired - current
-        for port in sorted(to_add):
-            commands.append('link-aggregation members ethernet {0}'.format(port))
-
-        # Members to remove
-        to_remove = current - desired
-        for port in sorted(to_remove):
-            commands.append('no link-aggregation members ethernet {0}'.format(port))
-
-    # Set LACP mode
-    if lacp_changed:
-        if lacp_mode:
-            commands.append('lacp mode {0}'.format(lacp_mode))
-        else:
-            commands.append('no lacp mode')
-
-    return commands
+    desired = _build_lag_state([config])
+    operations = plan_operations(existing_config, desired, 'replaced', LAG_POLICY)
+    return _render_lag_operations(operations)
 
 
 def build_lifecycle_commands(
@@ -206,10 +236,9 @@ def build_lifecycle_commands(
     existing_config: LagInterfaceState,
 ) -> list[str]:
     """Build commands for all requested LAG interface configs."""
-    commands: list[str] = []
-    for config in config_list:
-        commands.extend(build_trunk_commands(config, existing_config))
-    return commands
+    desired = _build_lag_state(config_list)
+    operations = plan_operations(existing_config, desired, state, LAG_POLICY)
+    return _render_lag_operations(operations)
 
 
 def build_after_state(
@@ -218,14 +247,9 @@ def build_after_state(
     state: str,
 ) -> LagInterfaceState:
     """Build the expected normalized LAG interface state after lifecycle execution."""
-    after = dict(before)
-    if state == 'replaced':
-        after = {}
-    for config in desired:
-        current = dict(after.get(config['name'], {}))
-        current.update(config)
-        after[config['name']] = current
-    return after
+    desired_state = _build_lag_state(desired)
+    operations = plan_operations(before, desired_state, state, LAG_POLICY)
+    return _ensure_lag_names(apply_operations_to_state(before, operations, LAG_POLICY))
 
 
 def gather_lag_interfaces(module: "AnsibleModuleType") -> LagInterfaceState:

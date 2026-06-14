@@ -50,8 +50,8 @@ options:
   state:
     description:
       - Desired state of the configuration.
-      - C(merged) - Create or update interface config as specified.
-      - C(replaced) - Replace existing interface config with specified config.
+      - C(merged) - Add configured IPv4 and IPv6 addresses without removing existing addresses.
+      - C(replaced) - Synchronize explicitly declared address fields for the listed interfaces only.
       - C(gathered) - Gather interface state without changing the device.
       - C(rendered) - Render CLI commands without connecting to the device.
     type: str
@@ -81,7 +81,7 @@ EXAMPLES = """
           - address: 2001:db8::1/64
     state: merged
 
-- name: Replace all L3 interface configs
+- name: Replace IPv4 on a specific VLAN interface
   c1emon.xikeos.xikeos_l3_interfaces:
     config:
       - name: vlan-interface 10
@@ -123,8 +123,16 @@ rendered:
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.l3_interfaces import L3InterfacesFacts
-from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import gather_with_error_boundary, run_resource_module_lifecycle
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.reconcile import (
+    FieldPolicy,
+    Operation,
+    ReconciliationInputError,
+    ResourcePolicy,
+    apply_operations_to_state,
+    plan_operations,
+)
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -133,8 +141,95 @@ if TYPE_CHECKING:
 L3InterfaceConfig = dict[str, Any]
 L3InterfaceState = dict[str, L3InterfaceConfig]
 
+L3_POLICY = ResourcePolicy(
+    identity=("name",),
+    fields={
+        "ipv4": FieldPolicy(kind="set", identity=("address", "subnet_mask")),
+        "ipv6": FieldPolicy(kind="set", identity=("address",)),
+    },
+)
+
+
+def _normalize_l3_name(name: str) -> str:
+    name = str(name).strip()
+    return name if name.startswith("vlan-interface") else "vlan-interface {0}".format(name)
+
+
+def _normalize_l3_resource(resource: L3InterfaceConfig) -> L3InterfaceConfig:
+    normalized: L3InterfaceConfig = {}
+    if "ipv4" in resource:
+        normalized["ipv4"] = [dict(address) for address in (resource.get("ipv4") or [])]
+    if "ipv6" in resource:
+        ipv6_addresses = []
+        for address in resource.get("ipv6") or []:
+            item = dict(address)
+            if "subnet" in item and "/" not in str(item.get("address", "")):
+                item["address"] = "{0}/{1}".format(item["address"], item["subnet"])
+            item.pop("subnet", None)
+            ipv6_addresses.append(item)
+        normalized["ipv6"] = ipv6_addresses
+    return normalized
+
+
+def _normalize_l3_state(state: L3InterfaceState) -> L3InterfaceState:
+    normalized: L3InterfaceState = {}
+    for name, config in (state or {}).items():
+        interface_name = _normalize_l3_name(config.get("name", name))
+        if interface_name in normalized:
+            raise ReconciliationInputError("duplicate L3 interface config: {0}".format(interface_name))
+        normalized[interface_name] = _normalize_l3_resource(config)
+    return normalized
+
+
+def _build_l3_state(config_list: list[L3InterfaceConfig]) -> L3InterfaceState:
+    desired: L3InterfaceState = {}
+    for config in config_list:
+        interface_name = _normalize_l3_name(config["name"])
+        if interface_name in desired:
+            raise ReconciliationInputError("duplicate L3 interface config: {0}".format(interface_name))
+        desired[interface_name] = _normalize_l3_resource(config)
+    return desired
+
+
+def _render_l3_operations(operations: list[Operation]) -> list[str]:
+    commands: list[str] = []
+    current_resource = None
+
+    for operation in operations:
+        if operation.resource != current_resource:
+            commands.append("interface {0}".format(operation.resource[0][1]))
+            current_resource = operation.resource
+
+        if operation.field == "ipv4":
+            address = operation.value["address"]
+            mask = operation.value["subnet_mask"]
+            if operation.action == "add_item":
+                commands.append("ip address {0} {1}".format(address, mask))
+            elif operation.action == "remove_item":
+                commands.append("no ip address {0} {1}".format(address, mask))
+            else:
+                raise ReconciliationInputError("unsupported L3 operation: {0}".format(operation.action))
+            continue
+
+        if operation.field == "ipv6":
+            address = operation.value["address"]
+            if operation.action == "add_item":
+                commands.append("ipv6 address {0}".format(address))
+            elif operation.action == "remove_item":
+                commands.append("no ipv6 address {0}".format(address))
+            else:
+                raise ReconciliationInputError("unsupported L3 operation: {0}".format(operation.action))
+            continue
+
+        raise ReconciliationInputError("unsupported L3 field: {0}".format(operation.field))
+
+    return commands
+
 def build_commands(config: L3InterfaceConfig, existing_config: L3InterfaceState) -> list[str]:
-    """Build CLI commands for a single interface config entry.
+    """Build replaced-style CLI commands for a single interface config entry.
+
+    This preserves the legacy direct helper behavior. Lifecycle execution uses
+    build_lifecycle_commands() so the requested state controls reconciliation.
 
     Args:
         config: dict with 'name', 'ipv4', 'ipv6'
@@ -143,52 +238,9 @@ def build_commands(config: L3InterfaceConfig, existing_config: L3InterfaceState)
     Returns:
         list: CLI commands to apply
     """
-    commands: list[str] = []
-    interface_name = config['name']
-    existing = existing_config.get(interface_name, {'ipv4': [], 'ipv6': []})
-
-    # Build desired state
-    desired_ipv4 = config.get('ipv4') or []
-    desired_ipv6 = config.get('ipv6') or []
-
-    existing_ipv4 = existing.get('ipv4', [])
-    existing_ipv6 = existing.get('ipv6', [])
-
-    # Normalize for comparison
-    desired_ipv4_set = {(a['address'], a['subnet_mask']) for a in desired_ipv4}
-    existing_ipv4_set = {(a['address'], a.get('subnet_mask', '')) for a in existing_ipv4}
-
-    desired_ipv6_set = {a['address'] for a in desired_ipv6}
-    existing_ipv6_set = {a['address'] for a in existing_ipv6}
-
-    # Compute addresses to add and remove
-    ipv4_to_add = desired_ipv4_set - existing_ipv4_set
-    ipv4_to_remove = existing_ipv4_set - desired_ipv4_set
-    ipv6_to_add = desired_ipv6_set - existing_ipv6_set
-    ipv6_to_remove = existing_ipv6_set - desired_ipv6_set
-
-    if not ipv4_to_add and not ipv4_to_remove and not ipv6_to_add and not ipv6_to_remove:
-        return []
-
-    commands.append('interface {0}'.format(interface_name))
-
-    # Remove old IPv4 addresses
-    for addr, mask in ipv4_to_remove:
-        commands.append('no ip address {0} {1}'.format(addr, mask))
-
-    # Add new IPv4 addresses
-    for addr, mask in ipv4_to_add:
-        commands.append('ip address {0} {1}'.format(addr, mask))
-
-    # Remove old IPv6 addresses
-    for addr in ipv6_to_remove:
-        commands.append('no ipv6 address {0}'.format(addr))
-
-    # Add new IPv6 addresses
-    for addr in desired_ipv6_set - existing_ipv6_set:
-        commands.append('ipv6 address {0}'.format(addr))
-
-    return commands
+    desired = _build_l3_state([config])
+    operations = plan_operations(_normalize_l3_state(existing_config), desired, 'replaced', L3_POLICY)
+    return _render_l3_operations(operations)
 
 
 def build_lifecycle_commands(
@@ -197,10 +249,9 @@ def build_lifecycle_commands(
     existing_config: L3InterfaceState,
 ) -> list[str]:
     """Build commands for all requested L3 interface configs."""
-    commands: list[str] = []
-    for config in config_list:
-        commands.extend(build_commands(config, existing_config))
-    return commands
+    desired = _build_l3_state(config_list)
+    operations = plan_operations(_normalize_l3_state(existing_config), desired, state, L3_POLICY)
+    return _render_l3_operations(operations)
 
 
 def build_after_state(
@@ -209,20 +260,15 @@ def build_after_state(
     state: str,
 ) -> L3InterfaceState:
     """Build the expected normalized L3 interface state after lifecycle execution."""
-    after = dict(before)
-    if state == 'replaced':
-        after = {}
-    for config in desired:
-        current = dict(after.get(config['name'], {'ipv4': [], 'ipv6': []}))
-        current['ipv4'] = list(config.get('ipv4') or [])
-        current['ipv6'] = list(config.get('ipv6') or [])
-        after[config['name']] = current
-    return after
+    desired_state = _build_l3_state(desired)
+    before_state = _normalize_l3_state(before)
+    operations = plan_operations(before_state, desired_state, state, L3_POLICY)
+    return apply_operations_to_state(before_state, operations, L3_POLICY)
 
 
 def gather_l3_interfaces(module: "AnsibleModuleType") -> L3InterfaceState:
     """Gather L3 interface facts required for idempotent diffing."""
-    return gather_with_error_boundary(module, lambda: L3InterfacesFacts(module).get_facts(), 'failed to gather L3 interface facts', 'l3_interfaces', {})
+    return gather_with_error_boundary(module, lambda: _normalize_l3_state(L3InterfacesFacts(module).get_facts()), 'failed to gather L3 interface facts', 'l3_interfaces', {})
 
 
 def main() -> None:

@@ -4,6 +4,14 @@ from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
 # Import command generation functions directly (no device connection needed)
+import pytest
+
+from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.l3_interfaces import (
+    parse_running_config as l3_parse_running_config,
+)
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.reconcile import (
+    ReconciliationInputError,
+)
 from ansible_collections.c1emon.xikeos.plugins.modules.xikeos_vlans import (
     get_commands as vlan_get_commands,
     vlan_id_range,
@@ -15,9 +23,13 @@ from ansible_collections.c1emon.xikeos.plugins.modules.xikeos_l2_interfaces impo
     build_commands as l2_build_commands,
 )
 from ansible_collections.c1emon.xikeos.plugins.modules.xikeos_l3_interfaces import (
+    build_after_state as l3_build_after_state,
     build_commands as l3_build_commands,
+    build_lifecycle_commands as l3_build_lifecycle_commands,
 )
 from ansible_collections.c1emon.xikeos.plugins.modules.xikeos_lag_interfaces import (
+    build_after_state as lag_build_after_state,
+    build_lifecycle_commands as lag_build_lifecycle_commands,
     build_trunk_commands,
 )
 from ansible_collections.c1emon.xikeos.plugins.modules.xikeos_ospf_v2 import (
@@ -361,6 +373,164 @@ class TestLagTrunkCommands:
         }
         cmds = build_trunk_commands(config, existing)
         assert cmds == []
+
+
+class TestL3LifecycleRegressions:
+    """Lifecycle planner regression tests for L3 interfaces."""
+
+    def test_merged_adds_without_removing_existing_addresses(self):
+        current = {
+            "vlan-interface 100": {
+                "ipv4": [{"address": "192.168.100.1", "subnet_mask": "255.255.255.0"}],
+                "ipv6": [{"address": "2001:db8::1/64"}],
+            }
+        }
+        config = [
+            {
+                "name": "vlan-interface 100",
+                "ipv4": [{"address": "192.168.100.2", "subnet_mask": "255.255.255.0"}],
+                "ipv6": [{"address": "2001:db8::2/64"}],
+            }
+        ]
+
+        cmds = l3_build_lifecycle_commands(config, "merged", current)
+
+        assert "ip address 192.168.100.2 255.255.255.0" in cmds
+        assert "ipv6 address 2001:db8::2/64" in cmds
+        assert not any(c.startswith("no ip address") for c in cmds)
+        assert not any(c.startswith("no ipv6 address") for c in cmds)
+
+    def test_replaced_preserves_unlisted_interfaces_and_omitted_ipv6(self):
+        current = {
+            "vlan-interface 10": {
+                "ipv4": [{"address": "10.0.0.1", "subnet_mask": "255.255.255.0"}],
+                "ipv6": [{"address": "2001:db8::1/64"}],
+            },
+            "vlan-interface 20": {
+                "ipv4": [{"address": "10.0.20.1", "subnet_mask": "255.255.255.0"}],
+            },
+        }
+        config = [
+            {
+                "name": "vlan-interface 10",
+                "ipv4": [{"address": "10.0.0.2", "subnet_mask": "255.255.255.0"}],
+            }
+        ]
+
+        cmds = l3_build_lifecycle_commands(config, "replaced", current)
+        after = l3_build_after_state(current, config, "replaced")
+
+        assert "no ip address 10.0.0.1 255.255.255.0" in cmds
+        assert "ip address 10.0.0.2 255.255.255.0" in cmds
+        assert not any("no ipv6 address" in c for c in cmds)
+        assert "vlan-interface 20" in after
+        assert after["vlan-interface 20"] == {"ipv4": [{"address": "10.0.20.1", "subnet_mask": "255.255.255.0"}]}
+
+    def test_real_parser_output_is_normalized_for_idempotent_lifecycle_diff(self):
+        current = l3_parse_running_config(
+            """\
+interface vlan-interface 100
+ ip address 10.0.0.1 255.255.255.0
+ ipv6 address 2001:db8::1/64
+"""
+        )
+        config = [
+            {
+                "name": "vlan-interface 100",
+                "ipv4": [{"address": "10.0.0.1", "subnet_mask": "255.255.255.0"}],
+                "ipv6": [{"address": "2001:db8::1/64"}],
+            }
+        ]
+
+        cmds = l3_build_lifecycle_commands(config, "merged", current)
+
+        assert cmds == []
+
+    def test_duplicate_l3_interface_names_fail_fast(self):
+        config = [
+            {"name": "vlan-interface 100", "ipv4": []},
+            {"name": "100", "ipv6": []},
+        ]
+
+        with pytest.raises(ReconciliationInputError, match="duplicate L3 interface config"):
+            l3_build_lifecycle_commands(config, "merged", {})
+
+
+class TestLagLifecycleRegressions:
+    """Lifecycle planner regression tests for LAG interfaces."""
+
+    def test_merged_adds_members_without_removing_existing_members(self):
+        current = {
+            "eth-trunk 1": {"mode": "static", "members": ["0/0/1", "0/0/2"]}
+        }
+        config = [
+            {"name": "eth-trunk 1", "members": ["0/0/2", "0/0/3"]}
+        ]
+
+        cmds = lag_build_lifecycle_commands(config, "merged", current)
+
+        assert "link-aggregation members ethernet 0/0/3" in cmds
+        assert not any(c.startswith("no link-aggregation members") for c in cmds)
+
+    def test_replaced_preserves_unlisted_trunks_and_member_order_is_idempotent(self):
+        current = {
+            "eth-trunk 1": {"mode": "static", "members": ["0/0/2", "0/0/1"]},
+            "eth-trunk 2": {"mode": "dynamic", "members": ["0/0/8"]},
+        }
+        config = [
+            {"name": "eth-trunk 1", "mode": "dynamic", "members": ["0/0/1", "0/0/3"]}
+        ]
+
+        cmds = lag_build_lifecycle_commands(config, "replaced", current)
+        after = lag_build_after_state(current, config, "replaced")
+
+        assert "no link-aggregation members ethernet 0/0/2" in cmds
+        assert "link-aggregation members ethernet 0/0/3" in cmds
+        assert "eth-trunk 2" in after
+        assert after["eth-trunk 2"] == {"name": "eth-trunk 2", "mode": "dynamic", "members": ["0/0/8"]}
+        assert after["eth-trunk 1"]["members"] == ["0/0/1", "0/0/3"]
+
+    def test_member_order_difference_only_is_idempotent(self):
+        current = {
+            "eth-trunk 1": {"members": ["0/0/2", "0/0/1"]}
+        }
+        config = [
+            {"name": "eth-trunk 1", "members": ["0/0/1", "0/0/2"]}
+        ]
+
+        cmds = lag_build_lifecycle_commands(config, "replaced", current)
+
+        assert cmds == []
+
+    def test_replaced_explicit_lacp_mode_null_removes_lacp_mode(self):
+        current = {
+            "eth-trunk 1": {"mode": "dynamic", "lacp_mode": "active"}
+        }
+        config = [
+            {"name": "eth-trunk 1", "lacp_mode": None}
+        ]
+
+        cmds = lag_build_lifecycle_commands(config, "replaced", current)
+
+        assert cmds == ["interface eth-trunk 1", "no lacp mode"]
+
+    def test_new_lag_after_state_includes_name(self):
+        config = [
+            {"name": "eth-trunk 1", "members": ["0/0/1"]}
+        ]
+
+        after = lag_build_after_state({}, config, "merged")
+
+        assert after["eth-trunk 1"]["name"] == "eth-trunk 1"
+
+    def test_duplicate_lag_trunk_names_fail_fast(self):
+        config = [
+            {"name": "eth-trunk 1", "members": ["0/0/1"]},
+            {"name": "eth-trunk 1", "members": ["0/0/2"]},
+        ]
+
+        with pytest.raises(ReconciliationInputError, match="duplicate LAG interface config"):
+            lag_build_lifecycle_commands(config, "merged", {})
 
 
 # ---------------------------------------------------------------------------

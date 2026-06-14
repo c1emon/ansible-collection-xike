@@ -759,8 +759,8 @@ def test_acls_facts_failure_is_explicit():
             None,
             {"config": [{"name": "vlan-interface 100", "ipv4": [{"address": "10.0.0.2", "subnet_mask": "255.255.255.0"}]}], "state": "merged"},
             {"vlan-interface 100": {"ipv4": [{"address": "10.0.0.1", "subnet_mask": "255.255.255.0"}], "ipv6": []}},
-            {"vlan-interface 100": {"ipv4": [{"address": "10.0.0.2", "subnet_mask": "255.255.255.0"}], "ipv6": []}},
-            ["interface vlan-interface 100", "no ip address 10.0.0.1 255.255.255.0", "ip address 10.0.0.2 255.255.255.0"],
+            {"vlan-interface 100": {"ipv4": [{"address": "10.0.0.1", "subnet_mask": "255.255.255.0"}, {"address": "10.0.0.2", "subnet_mask": "255.255.255.0"}], "ipv6": []}},
+            ["interface vlan-interface 100", "ip address 10.0.0.2 255.255.255.0"],
         ),
         (
             lag_interfaces_module,

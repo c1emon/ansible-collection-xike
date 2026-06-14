@@ -40,14 +40,16 @@ Map/list fields are deferred because ordered ACL rules and richer nested structu
 
 ### Operations are semantic, not CLI contexts
 
-The reconciler should emit operations such as:
+The reconciler MVP emits field-level operations:
 
-- `ensure_resource_present`
-- `ensure_resource_absent`
 - `set_field`
 - `unset_field`
 - `add_item`
 - `remove_item`
+
+Resource-level create/delete operations such as `ensure_resource_present` and
+`ensure_resource_absent` are deferred until a module migration needs those
+semantics.
 
 It should not emit `replace`, `enter_context`, or `exit_context`. Replacement is a state-level behavior that expands into smaller operations. CLI contexts such as `interface eth-trunk 1` belong in module-specific renderers.
 
@@ -97,7 +99,7 @@ The planner may initially be called once for commands and once for `build_after_
 
 Rollback: revert the new utility and the L3/LAG module migrations. No persisted data migration is involved.
 
-## Open Questions
+## Resolved Questions
 
-- Should LAG `dynamic -> static` with existing `lacp_mode` fail unless the user explicitly sets `lacp_mode: null`, or should the renderer automatically emit `no lacp mode`?
-- Should `deleted` be implemented in the generic reconciler MVP even though L3/LAG do not expose it today, or deferred until a module migration needs it?
+- LAG `dynamic -> static` with existing `lacp_mode` preserves omitted `lacp_mode` as no-op. Users can explicitly set `lacp_mode: null` to render `no lacp mode`.
+- `deleted` is deferred until a module migration requires it. L3 and LAG do not expose `deleted` in this MVP.
