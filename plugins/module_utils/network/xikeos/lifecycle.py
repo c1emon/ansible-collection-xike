@@ -33,7 +33,7 @@ def gather_with_error_boundary(
             msg=msg,
             error=str(exc),
             detail=getattr(exc, "detail", None),
-            context=getattr(exc, "context", context),
+            context=getattr(exc, "context", None) or context,
         )
         module.fail_json(
             **payload,

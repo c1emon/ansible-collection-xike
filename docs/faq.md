@@ -133,10 +133,10 @@ Ensure:
 #### 5. Debug Mode
 ```bash
 # Run playbook with debug output
-ansible-playbook playbook.yml -i inventory.yml -vvvv
+uv run ansible-playbook playbook.yml -i inventory.yml -vvvv
 
 # Check network_cli and platform plugin logs
-ANSIBLE_DEBUG=1 ansible-playbook playbook.yml -i inventory.yml
+ANSIBLE_DEBUG=1 uv run ansible-playbook playbook.yml -i inventory.yml
 ```
 
 #### 6. Common Issues
@@ -213,7 +213,7 @@ COMMAND_MAP = {
 uv run pytest -q tests/unit
 
 # Test with new firmware
-ansible-playbook test_playbook.yml -i inventory.yml
+uv run ansible-playbook test_playbook.yml -i inventory.yml
 ```
 
 #### 6. Document Changes
@@ -328,10 +328,10 @@ All resource modules support check mode (`--check` or `--diff`):
 
 ```bash
 # Check mode (dry run)
-ansible-playbook playbook.yml --check
+uv run ansible-playbook playbook.yml --check
 
 # Check mode with diff
-ansible-playbook playbook.yml --check --diff
+uv run ansible-playbook playbook.yml --check --diff
 ```
 
 In check mode:
@@ -382,10 +382,10 @@ ansible_vault:
   vault_switch_password: "your_password_here"
 
 # Run playbook with vault
-ansible-playbook playbook.yml --ask-vault-pass
+uv run ansible-playbook playbook.yml --ask-vault-pass
 
 # Or use vault ID
-ansible-playbook playbook.yml --vault-id prod@prompt
+uv run ansible-playbook playbook.yml --vault-id prod@prompt
 ```
 
 In inventory:
@@ -461,12 +461,12 @@ uv run pytest -q tests/unit
 
 2. **Use serial execution**:
 ```bash
-ansible-playbook playbook.yml --serial 1
+uv run ansible-playbook playbook.yml --serial 1
 ```
 
 3. **Limit to specific hosts**:
 ```bash
-ansible-playbook playbook.yml --limit core-sw01
+uv run ansible-playbook playbook.yml --limit core-sw01
 ```
 
 4. **Use facts caching**:
@@ -515,11 +515,11 @@ all:
 
 3. **Use tags** for selective execution:
 ```bash
-ansible-playbook playbook.yml --tags vlans
-ansible-playbook playbook.yml --tags interfaces
+uv run ansible-playbook playbook.yml --tags vlans
+uv run ansible-playbook playbook.yml --tags interfaces
 ```
 
 4. **Use parallel execution** (with caution):
 ```bash
-ansible-playbook playbook.yml --forks 10
+uv run ansible-playbook playbook.yml --forks 10
 ```

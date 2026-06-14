@@ -167,7 +167,7 @@ __metaclass__ = type
 DOCUMENTATION = """
 module: xikeos_<feature>
 short_description: Manage <feature> on Xike OS devices
-version_added: "0.1.0"
+version_added: "0.2.0"
 description:
   - This module provides declarative management of <feature>
     on Xike (兮克) OS devices.
@@ -385,7 +385,7 @@ uv run pytest tests/unit/test_xikeos_<feature>.py -v
 uv run pytest tests/unit -v
 
 # Test with Ansible
-ansible-playbook tests/integration/targets/xikeos_<feature>/tests/main.yml -i tests/integration/inventory.ini
+uv run ansible-playbook tests/integration/targets/xikeos_<feature>/tests/main.yml -i tests/integration/inventory.ini
 ```
 
 ---
@@ -651,7 +651,7 @@ EOF
 
 3. **Run test**:
 ```bash
-ansible-playbook test_playbook.yml -i inventory.yml -vvv
+uv run ansible-playbook test_playbook.yml -i inventory.yml -vvv
 ```
 
 ### Test Checklist
@@ -728,7 +728,7 @@ __metaclass__ = type
 DOCUMENTATION = """
 module: xikeos_<feature>
 short_description: ...
-version_added: "0.1.0"
+version_added: "0.2.0"
 description:
   - ...
 options:
@@ -827,7 +827,7 @@ Use Ansible documentation format:
 DOCUMENTATION = """
 module: xikeos_<feature>
 short_description: Brief description
-version_added: "0.1.0"
+version_added: "0.2.0"
 description:
   - Detailed description
   - Can span multiple lines

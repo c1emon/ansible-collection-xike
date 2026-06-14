@@ -170,6 +170,14 @@ def main() -> None:
         return
     if unsafe_commands:
         module.warn('unsafe_allow_mutating_commands enabled for guarded commands: {0}'.format(', '.join(unsafe_commands)))
+        if module.check_mode:
+            module.exit_json(
+                changed=True,
+                commands=commands,
+                stdout=[],
+                stdout_lines=[],
+            )
+            return
 
     stdout = []
     failed_conditions = []

@@ -62,7 +62,7 @@ Documentation changes are included because unsafe examples and wrong commands di
 - **Risk:** Check-mode behavior for unsafe commands could be ambiguous between `changed: true`, `skipped: true`, or failure. → **Mitigation:** Define tests around "no device command is sent" first; choose result fields consistently with existing module behavior.
 - **Risk:** OSPF facts may begin failing where they previously returned empty facts. → **Mitigation:** This is intentional for correctness; failures should be contextual and test-covered.
 - **Risk:** Release workflow version parsing may become brittle. → **Mitigation:** Use a simple deterministic extraction from `galaxy.yml` and verify the expected tarball exists before publishing.
-- **Risk:** Documentation cleanup may be incomplete. → **Mitigation:** Add targeted grep-based verification for legacy connection examples, bare `ansible-playbook`, and `npx gitnexus analyze` where appropriate.
+- **Risk:** Documentation cleanup may be incomplete. → **Mitigation:** Add targeted grep-based verification for legacy connection examples, bare `ansible-playbook`, and `gitnexus analyze` guidance where appropriate.
 
 ## Migration Plan
 

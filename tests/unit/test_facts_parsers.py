@@ -5,6 +5,7 @@ __metaclass__ = type
 
 import sys
 import types
+from unittest.mock import Mock
 
 import pytest
 
@@ -24,6 +25,7 @@ from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.interfaces imp
     parse_interface_brief,
 )
 from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.ospfv2 import (
+    Ospfv2Facts,
     parse_ospf_neighbors,
     parse_ospf_summary,
     parse_running_config,
@@ -579,6 +581,47 @@ Routing Process "ospf 1" with ID 1.1.1.1
     def test_ospf_summary_empty(self):
         result = parse_ospf_summary("")
         assert result == {}
+
+
+# ---------------------------------------------------------------------------
+# OSPF facts gathering tests
+# ---------------------------------------------------------------------------
+
+class TestOspfFactsGathering:
+    """Tests for Ospfv2Facts."""
+
+    def test_ospfv2_facts_use_run_commands_instead_of_module_run_command(self):
+        module = types.SimpleNamespace(run_command=Mock())
+        summary_output = 'Routing Process "ospf 1" with ID 1.1.1.1\n Area BACKBONE(0)\n'
+        neighbor_output = (
+            'Neighbor ID     Pri  State           Dead Time   Address         Interface\n'
+            '2.2.2.2           1  FULL/DR         00:00:30    10.0.1.2        vlan-interface 20\n'
+        )
+
+        run_mock = Mock(return_value=[summary_output, neighbor_output])
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr(
+                "ansible_collections.c1emon.xikeos.plugins.module_utils.facts.ospfv2.run_commands",
+                run_mock,
+            )
+            facts = Ospfv2Facts(module).facts
+
+        run_mock.assert_called_once_with(module, ["show ip ospf", "show ip ospf neighbor"], check_rc=True)
+        module.run_command.assert_not_called()
+        assert facts["processes"][1]["router_id"] == "1.1.1.1"
+        assert facts["processes"][1]["areas"] == [{"area_id": "0"}]
+        assert facts["neighbors"][0]["neighbor_id"] == "2.2.2.2"
+
+    def test_ospfv2_facts_surface_gather_failures(self):
+        module = types.SimpleNamespace(run_command=Mock())
+
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr(
+                "ansible_collections.c1emon.xikeos.plugins.module_utils.facts.ospfv2.run_commands",
+                Mock(side_effect=RuntimeError("boom")),
+            )
+            with pytest.raises(RuntimeError, match="boom"):
+                Ospfv2Facts(module)
 
 
 # ---------------------------------------------------------------------------
