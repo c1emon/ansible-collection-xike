@@ -1,6 +1,6 @@
 # c1emon.xikeos Ansible Collection
 
-[![Version](https://img.shields.io/badge/version-0.2.0-blue.svg)](https://github.com/c1emon/ansible-collection-xike)
+[![Version](https://img.shields.io/badge/version-0.2.1-blue.svg)](https://github.com/c1emon/ansible-collection-xike)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![Ansible](https://img.shields.io/badge/Ansible-%3E%3D2.15-red.svg)](https://www.ansible.com/)
 [![Python](https://img.shields.io/badge/Python-%3E%3D3.10-blue.svg)](https://www.python.org/)
@@ -116,7 +116,7 @@ ansible-galaxy collection install c1emon.xikeos
 git clone https://github.com/c1emon/ansible-collection-xike.git
 cd ansible-collection-xike
 ansible-galaxy collection build
-ansible-galaxy collection install c1emon-xikeos-0.2.0.tar.gz
+ansible-galaxy collection install c1emon-xikeos-0.2.1.tar.gz
 ```
 
 ### From Local Development Directory
@@ -161,7 +161,7 @@ Release process:
 1. Update `galaxy.yml` `version` to a new, never-published version.
 2. Commit and merge the release changes.
 3. Create and publish a GitHub Release whose tag matches `galaxy.yml` version;
-   a leading `v` is allowed, for example `v0.2.0` for `version: 0.2.0`.
+   a leading `v` is allowed, for example `v0.2.1` for `version: 0.2.1`.
 4. The release workflow runs `uv sync --group dev`, `uv run pytest tests/unit`,
    verifies the release tag matches `galaxy.yml`, confirms the exact
    `c1emon-xikeos-<version>.tar.gz` tarball exists after build, builds the
