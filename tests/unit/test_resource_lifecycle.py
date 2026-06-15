@@ -10,6 +10,7 @@ import pytest
 
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import run_resource_module_lifecycle
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos import errors as xikeos_errors
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.reconcile import ReconciliationInputError
 
 from .lifecycle_helpers import ExitJson, fake_module
 
@@ -206,3 +207,26 @@ def test_resource_lifecycle_reports_gather_apply_and_post_gather_failures():
 
     assert module.fail_json.call_args.kwargs["changed"] is True
     assert module.fail_json.call_args.kwargs["verification_context"] == "final-state"
+
+
+def test_resource_lifecycle_reports_reconciliation_failures_cleanly():
+    module = fake_module({"before": [{"name": "one"}]})
+    module.fail_json.side_effect = ExitJson
+
+    def build_commands(config, state, before):
+        raise ReconciliationInputError("bad resource policy")
+
+    with pytest.raises(ExitJson):
+        run_resource_module_lifecycle(
+            module,
+            [{"name": "one"}],
+            "merged",
+            _gather,
+            build_commands,
+            _build_after,
+        )
+
+    assert module.fail_json.call_args.kwargs["msg"] == "failed to plan resource commands"
+    assert module.fail_json.call_args.kwargs["changed"] is False
+    assert module.fail_json.call_args.kwargs["context"] == "resource planning"
+    assert module.fail_json.call_args.kwargs["error"] == "bad resource policy"
