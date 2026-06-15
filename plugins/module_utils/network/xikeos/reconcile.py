@@ -7,6 +7,25 @@ from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
 
+"""Pure reconciliation helpers for normalized XikeOS resource state.
+
+This module plans semantic operations from normalized resource dictionaries. It
+does not import AnsibleModule, connect to a device, or render CLI commands. Each
+resource module owns normalization and CLI rendering, while this module owns the
+common state semantics for scalar fields and identity-based set fields.
+
+Resource data is represented as a mapping keyed by resource identity, for
+example::
+
+    current = {"eth-trunk 1": {"mode": "static", "members": ["0/0/1"]}}
+    desired = {"eth-trunk 1": {"members": ["0/0/1", "0/0/2"]}}
+
+Policies describe how to identify resources and set items. The planner then
+returns operations such as ``set_field``, ``add_item``, and ``remove_item`` for
+module-specific renderers to convert into XikeOS CLI.
+"""
+
+
 class ReconciliationError(Exception):
     """Base error for reconciliation planning failures."""
 
@@ -21,6 +40,31 @@ class UnsupportedRemovalError(ReconciliationError):
 
 @dataclass
 class FieldPolicy:
+    """Describe reconciliation semantics for one resource field.
+
+    Args:
+        kind: ``"scalar"`` for single-value fields, or ``"set"`` for list fields
+            whose items are compared by identity rather than list position.
+        identity: Field names used to identify set items. Empty identity means
+            the item itself is its identity, which is useful for scalar list
+            items such as LAG member port strings.
+        removal_supported: Whether the field can be removed/unset. If false,
+            planning a removal raises :class:`UnsupportedRemovalError`.
+
+    Examples:
+        LAG mode is a scalar field::
+
+            FieldPolicy(kind="scalar", removal_supported=False)
+
+        L3 IPv4 addresses are set items identified by address and mask::
+
+            FieldPolicy(kind="set", identity=("address", "subnet_mask"))
+
+        LAG members are string set items::
+
+            FieldPolicy(kind="set", identity=())
+    """
+
     kind: str
     identity: tuple[str, ...] = ()
     removal_supported: bool = True
@@ -34,6 +78,27 @@ class FieldPolicy:
 
 @dataclass
 class ResourcePolicy:
+    """Describe how a resource type is identified and reconciled.
+
+    Args:
+        identity: Resource-level identity fields. Current L3/LAG modules use
+            ``("name",)`` so ``vlan-interface 10`` and ``eth-trunk 1`` are the
+            resource keys.
+        fields: Mapping of field name to :class:`FieldPolicy`.
+
+    Example:
+        Policy for a LAG resource::
+
+            ResourcePolicy(
+                identity=("name",),
+                fields={
+                    "mode": FieldPolicy(kind="scalar", removal_supported=False),
+                    "lacp_mode": FieldPolicy(kind="scalar", removal_supported=True),
+                    "members": FieldPolicy(kind="set", identity=()),
+                },
+            )
+    """
+
     identity: tuple[str, ...]
     fields: dict[str, FieldPolicy]
 
@@ -48,6 +113,30 @@ class ResourcePolicy:
 
 @dataclass(frozen=True)
 class Operation:
+    """A semantic resource operation produced by the planner.
+
+    Operations are intentionally not CLI commands. Resource modules render them
+    into the correct command context, such as ``interface vlan-interface 10``.
+
+    Attributes:
+        action: One of ``set_field``, ``unset_field``, ``add_item``, or
+            ``remove_item``.
+        resource: Canonical resource identity tuple, e.g.
+            ``(("name", "eth-trunk 1"),)``.
+        field: Resource field being changed.
+        value: New scalar value or set item payload, depending on action.
+
+    Example:
+        Adding one LAG member yields::
+
+            Operation(
+                "add_item",
+                (("name", "eth-trunk 1"),),
+                "members",
+                "0/0/2",
+            )
+    """
+
     action: str
     resource: tuple[tuple[str, Any], ...]
     field: str
@@ -55,7 +144,14 @@ class Operation:
 
 
 def resource_identity(resource: Mapping[str, Any], policy: ResourcePolicy) -> tuple[tuple[str, Any], ...]:
-    """Build a canonical resource identity tuple from normalized resource data."""
+    """Build a canonical resource identity tuple from normalized resource data.
+
+    Example:
+        With ``ResourcePolicy(identity=("name",), fields={...})``::
+
+            resource_identity({"name": "eth-trunk 1"}, policy)
+            # (("name", "eth-trunk 1"),)
+    """
     missing = [field for field in policy.identity if field not in resource]
     if missing:
         raise ReconciliationInputError(
@@ -65,7 +161,25 @@ def resource_identity(resource: Mapping[str, Any], policy: ResourcePolicy) -> tu
 
 
 def item_identity(item: Any, policy: FieldPolicy) -> tuple[tuple[str, Any], ...]:
-    """Build a canonical set-item identity tuple from normalized item data."""
+    """Build a canonical set-item identity tuple from normalized item data.
+
+    Dict items use the configured identity fields. Scalar list items use the
+    item value when no identity fields are configured.
+
+    Examples:
+        IPv4 dict item identity::
+
+            item_identity(
+                {"address": "10.0.0.1", "subnet_mask": "255.255.255.0"},
+                FieldPolicy(kind="set", identity=("address", "subnet_mask")),
+            )
+            # (("address", "10.0.0.1"), ("subnet_mask", "255.255.255.0"))
+
+        LAG member string identity::
+
+            item_identity("0/0/1", FieldPolicy(kind="set", identity=()))
+            # (("value", "0/0/1"),)
+    """
     if isinstance(item, Mapping):
         if policy.identity:
             missing = [field for field in policy.identity if field not in item]
@@ -95,6 +209,12 @@ def _sort_token(identity: tuple[tuple[str, Any], ...]) -> str:
 
 
 def _resource_key_from_input(key: Any, resource: Mapping[str, Any], policy: ResourcePolicy) -> tuple[tuple[str, Any], ...]:
+    """Normalize a caller-supplied map key into canonical resource identity.
+
+    Resource maps may be keyed by a plain value (``"eth-trunk 1"``), a tuple of
+    identity values, or a canonical identity tuple. If the resource payload also
+    contains identity fields, the key and payload must agree.
+    """
     if isinstance(key, tuple) and key and all(isinstance(entry, tuple) and len(entry) == 2 for entry in key):
         canonical_key = tuple((str(field), value) for field, value in key)
     elif len(policy.identity) == 1:
@@ -113,6 +233,7 @@ def _resource_key_from_input(key: Any, resource: Mapping[str, Any], policy: Reso
 
 
 def _normalize_resource_map(resources: Any, policy: ResourcePolicy, label: str) -> dict[tuple[tuple[str, Any], ...], dict[str, Any]]:
+    """Validate and canonicalize a normalized resource-state mapping."""
     if resources is None:
         return {}
     if not isinstance(resources, Mapping):
@@ -136,6 +257,11 @@ def _normalize_set_items(
     resource_key: tuple[tuple[str, Any], ...],
     field_name: str,
 ) -> list[tuple[tuple[tuple[str, Any], ...], Any]]:
+    """Validate and canonicalize set-field items for identity comparison.
+
+    Returns ``[(identity, value), ...]`` so callers can build dictionaries keyed
+    by item identity while preserving the original item payload for operations.
+    """
     if values is None:
         return []
     if not _is_sequence(values):
@@ -151,6 +277,7 @@ def _normalize_set_items(
 
 
 def _display_resource_key(identity: tuple[tuple[str, Any], ...]) -> Any:
+    """Convert canonical identity back to the public state-map key shape."""
     if len(identity) == 1:
         return identity[0][1]
     return tuple(value for _, value in identity)
@@ -162,7 +289,50 @@ def plan_operations(
     state: str,
     policy: ResourcePolicy,
 ) -> list[Operation]:
-    """Plan semantic operations for normalized resource state."""
+    """Plan semantic operations for normalized resource state.
+
+    ``merged`` is additive for set fields: desired-only set items are added, but
+    current-only set items are left untouched. ``replaced`` synchronizes only
+    resources listed in ``desired`` and only fields explicitly present in each
+    desired resource. Omitted fields are no-ops; explicit empty set fields remove
+    current set items when removal is supported.
+
+    Args:
+        current: Current normalized resource state, keyed by resource identity.
+        desired: Desired normalized resource state, keyed by resource identity.
+        state: ``merged``, ``replaced``, or ``rendered``. Rendered maps to merged
+            semantics because modules pass a synthetic current state.
+        policy: Resource policy defining identities and field semantics.
+
+    Returns:
+        A deterministic list of semantic :class:`Operation` objects.
+
+    Raises:
+        ReconciliationInputError: If inputs, policies, or state are malformed.
+        UnsupportedRemovalError: If the requested state requires a removal for a
+            field whose policy disallows removal.
+
+    Example:
+        Add a LAG member without removing existing members in ``merged``::
+
+            policy = ResourcePolicy(
+                identity=("name",),
+                fields={"members": FieldPolicy(kind="set", identity=())},
+            )
+            current = {"eth-trunk 1": {"members": ["0/0/1"]}}
+            desired = {"eth-trunk 1": {"members": ["0/0/1", "0/0/2"]}}
+
+            plan_operations(current, desired, "merged", policy)
+            # [Operation("add_item", (("name", "eth-trunk 1"),), "members", "0/0/2")]
+
+        Synchronize members in ``replaced``::
+
+            current = {"eth-trunk 1": {"members": ["0/0/1", "0/0/2"]}}
+            desired = {"eth-trunk 1": {"members": ["0/0/2", "0/0/3"]}}
+
+            plan_operations(current, desired, "replaced", policy)
+            # remove_item("0/0/1"), add_item("0/0/3")
+    """
     if state == "rendered":
         # Rendered mode plans desired commands from a synthetic current state;
         # merged semantics produce additive operations without gathering a device.
@@ -237,7 +407,28 @@ def apply_operations_to_state(
     operations: Sequence[Operation],
     policy: ResourcePolicy,
 ) -> dict[Any, dict[str, Any]]:
-    """Apply planned operations to normalized state and return simulated after-state."""
+    """Apply planned operations and return deterministic simulated after-state.
+
+    This helper is used by modules to produce check-mode or planned ``after``
+    data without connecting to the device after rendering commands. It applies
+    operations to a copy of the normalized current state and returns a state map
+    keyed by display resource keys such as ``"eth-trunk 1"``.
+
+    Example:
+        Simulate adding one member::
+
+            policy = ResourcePolicy(
+                identity=("name",),
+                fields={"members": FieldPolicy(kind="set", identity=())},
+            )
+            current = {"eth-trunk 1": {"members": ["0/0/1"]}}
+            operations = [
+                Operation("add_item", (("name", "eth-trunk 1"),), "members", "0/0/2")
+            ]
+
+            apply_operations_to_state(current, operations, policy)
+            # {"eth-trunk 1": {"members": ["0/0/1", "0/0/2"]}}
+    """
     state_map = _normalize_resource_map(current, policy, "current")
 
     for operation in operations:
