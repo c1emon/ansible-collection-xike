@@ -37,6 +37,7 @@ from ansible_collections.c1emon.xikeos.plugins.modules import (
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos import xikeos as network_utils
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos import errors as xikeos_errors
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos import safety as safety_utils
+from ansible_collections.c1emon.xikeos.plugins.module_utils.facts import ospfv2 as ospfv2_facts_module
 from ansible_collections.c1emon.xikeos.plugins.terminal.xikeos import TerminalModule
 
 from .lifecycle_helpers import ExitJson, fake_module
@@ -263,6 +264,49 @@ def test_xikeos_command_unsafe_override_warns_and_waits():
     module.warn.assert_called_once()
     assert module.exit_json.call_args.kwargs["changed"] is True
     assert module.exit_json.call_args.kwargs["stdout"] == ["ready"]
+
+
+def test_xikeos_command_check_mode_skips_network_for_guarded_commands():
+    module = _fake_module(
+        {
+            "commands": ["reload"],
+            "unsafe_allow_mutating_commands": True,
+            "wait_for": ["result[0] contains ready"],
+            "match": "all",
+            "retries": 2,
+            "interval": 0,
+        },
+        check_mode=True,
+    )
+    module.warn = Mock()
+    with patch.object(command_module, "AnsibleModule", return_value=module), patch.object(
+        command_module, "run_commands"
+    ) as run_mock:
+        with pytest.raises(ExitJson):
+            command_module.main()
+
+    module.warn.assert_called_once()
+    run_mock.assert_not_called()
+    assert module.exit_json.call_args.kwargs == {
+        "changed": True,
+        "commands": ["reload"],
+        "stdout": [],
+        "stdout_lines": [],
+    }
+
+
+def test_xikeos_command_check_mode_keeps_show_command_behavior():
+    module = _fake_module({"commands": ["show version"]}, check_mode=True)
+    with patch.object(command_module, "AnsibleModule", return_value=module), patch.object(
+        command_module, "run_commands", return_value=[b"line1\nline2"]
+    ) as run_mock:
+        with pytest.raises(ExitJson):
+            command_module.main()
+
+    run_mock.assert_called_once_with(module, ["show version"], check_rc=True)
+    assert module.exit_json.call_args.kwargs["changed"] is False
+    assert module.exit_json.call_args.kwargs["stdout"] == ["line1\nline2"]
+    assert module.exit_json.call_args.kwargs["stdout_lines"] == [["line1", "line2"]]
 
 
 def test_redaction_preserves_context_and_hides_secret_values():
@@ -715,8 +759,8 @@ def test_acls_facts_failure_is_explicit():
             None,
             {"config": [{"name": "vlan-interface 100", "ipv4": [{"address": "10.0.0.2", "subnet_mask": "255.255.255.0"}]}], "state": "merged"},
             {"vlan-interface 100": {"ipv4": [{"address": "10.0.0.1", "subnet_mask": "255.255.255.0"}], "ipv6": []}},
-            {"vlan-interface 100": {"ipv4": [{"address": "10.0.0.2", "subnet_mask": "255.255.255.0"}], "ipv6": []}},
-            ["interface vlan-interface 100", "no ip address 10.0.0.1 255.255.255.0", "ip address 10.0.0.2 255.255.255.0"],
+            {"vlan-interface 100": {"ipv4": [{"address": "10.0.0.1", "subnet_mask": "255.255.255.0"}, {"address": "10.0.0.2", "subnet_mask": "255.255.255.0"}], "ipv6": []}},
+            ["interface vlan-interface 100", "ip address 10.0.0.2 255.255.255.0"],
         ),
         (
             lag_interfaces_module,
@@ -777,6 +821,64 @@ def test_interface_family_lifecycle(module_under_test, facts_attr, facts_class, 
 
     assert failing.fail_json.call_args.kwargs["msg"].startswith("failed to gather")
     assert failing.fail_json.call_args.kwargs["error"] == "facts failed"
+
+
+def test_xikeos_ospf_v2_gathers_normalized_before_and_after_facts():
+    module = _fake_module({})
+    summary_output = """\
+Routing Process \"ospf 1\" with ID 1.1.1.1
+ Area BACKBONE(0)
+"""
+    neighbor_output = """\
+Neighbor ID     Pri  State           Dead Time   Address         Interface
+2.2.2.2           1  FULL/DR         00:00:30    10.0.1.2        vlan-interface 20
+"""
+
+    with patch.object(ospf_v2_module, "AnsibleModule", return_value=module), patch.object(
+        ospfv2_facts_module, "run_commands", return_value=[summary_output, neighbor_output]
+    ):
+        with pytest.raises(ExitJson):
+            ospf_v2_module.main()
+
+    result = module.exit_json.call_args.kwargs
+    assert result["before"] == {
+        "processes": {
+            1: {
+                "process_id": 1,
+                "router_id": "1.1.1.1",
+                "areas": [{"area_id": "0"}],
+                "networks": [],
+                "passive_interfaces": [],
+            }
+        },
+        "neighbors": [
+            {
+                "neighbor_id": "2.2.2.2",
+                "priority": 1,
+                "state": "FULL/DR",
+                "dead_time": "00:00:30",
+                "address": "10.0.1.2",
+                "interface": "vlan-interface 20",
+            }
+        ],
+    }
+    assert result["after"] == result["before"]
+
+
+def test_xikeos_ospf_v2_surfaces_contextual_fact_gather_failures():
+    module = _fake_module({})
+    module.fail_json.side_effect = ExitJson
+
+    with patch.object(ospf_v2_module, "AnsibleModule", return_value=module), patch.object(
+        ospfv2_facts_module,
+        "run_commands",
+        side_effect=xikeos_errors.XikeOSCommandError("command execution failed", commands=["show ip ospf"], detail="lost"),
+    ):
+        with pytest.raises(ExitJson):
+            ospf_v2_module.main()
+
+    assert module.fail_json.call_args.kwargs["context"] == "ospf_v2"
+    assert module.fail_json.call_args.kwargs["error"] == "command execution failed"
 
 
 @pytest.mark.parametrize(

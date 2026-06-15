@@ -44,6 +44,7 @@ jobs:
             echo "Release tag version '$tag_version' does not match galaxy.yml version '$galaxy_version'."
             exit 1
           fi
+          echo "galaxy_version=$galaxy_version" >> "$GITHUB_ENV"
 
       - name: Install Ansible collection dependencies
         run: uv run ansible-galaxy collection install ansible.netcommon -p .test_path
@@ -54,7 +55,16 @@ jobs:
       - name: Build collection
         run: uv run ansible-galaxy collection build --force
 
+      - name: Verify built tarball matches galaxy.yml version
+        run: |
+          tarball="c1emon-xikeos-${galaxy_version}.tar.gz"
+          if [ ! -f "$tarball" ]; then
+            echo "Expected tarball '$tarball' is missing after build."
+            ls -1 c1emon-xikeos-*.tar.gz || true
+            exit 1
+          fi
+
       - name: Publish collection to Galaxy
         run: |
-          tarball="$(ls c1emon-xikeos-*.tar.gz | head -n 1)"
+          tarball="c1emon-xikeos-${galaxy_version}.tar.gz"
           uv run ansible-galaxy collection publish "$tarball" --api-key "${{ secrets.ANSIBLE_GALAXY_API_KEY }}"

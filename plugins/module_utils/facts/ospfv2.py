@@ -9,6 +9,9 @@ __metaclass__ = type
 import re
 from typing import Any, TYPE_CHECKING
 
+from ansible.module_utils.common.text.converters import to_text
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.xikeos import run_commands
+
 if TYPE_CHECKING:
     from ansible.module_utils.basic import AnsibleModule
 
@@ -19,8 +22,8 @@ OSPFNeighbor = dict[str, Any]
 class Ospfv2Facts(object):
     """Gather OSPFv2 facts from Xike switches.
 
-    Executes 'show ip ospf', 'show ip ospf neighbor',
-    and 'show running-config' to parse OSPF configuration and state.
+    Executes 'show ip ospf' and 'show ip ospf neighbor' through the
+    network operational command path to parse OSPF state.
     """
 
     def __init__(self, module: "AnsibleModule") -> None:
@@ -33,22 +36,12 @@ class Ospfv2Facts(object):
         self.facts = {
             'processes': {},
         }
+        stdout = run_commands(self.module, ['show ip ospf', 'show ip ospf neighbor'], check_rc=True) or []
+        summary_output = to_text(stdout[0] if len(stdout) > 0 else '', errors='surrogate_or_strict')
+        neighbor_output = to_text(stdout[1] if len(stdout) > 1 else '', errors='surrogate_or_strict')
 
-        try:
-            # Get OSPF process summary
-            rc, out, err = self.module.run_command('show ip ospf')
-            if rc == 0:
-                self.facts['processes'] = parse_ospf_summary(out)
-
-            # Get OSPF neighbors
-            rc2, out2, err2 = self.module.run_command('show ip ospf neighbor')
-            if rc2 == 0:
-                self.facts['neighbors'] = parse_ospf_neighbors(out2)
-            else:
-                self.facts['neighbors'] = []
-
-        except Exception:
-            pass
+        self.facts['processes'] = parse_ospf_summary(summary_output)
+        self.facts['neighbors'] = parse_ospf_neighbors(neighbor_output)
 
 
 def parse_ospf_summary(output: str) -> dict[int, OSPFProcess]:

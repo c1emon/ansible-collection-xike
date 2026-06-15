@@ -1,6 +1,6 @@
 # c1emon.xikeos Ansible Collection
 
-[![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)](https://github.com/c1emon/ansible-collection-xike)
+[![Version](https://img.shields.io/badge/version-0.2.0-blue.svg)](https://github.com/c1emon/ansible-collection-xike)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![Ansible](https://img.shields.io/badge/Ansible-%3E%3D2.15-red.svg)](https://www.ansible.com/)
 [![Python](https://img.shields.io/badge/Python-%3E%3D3.10-blue.svg)](https://www.python.org/)
@@ -19,7 +19,7 @@ The `c1emon.xikeos` collection provides Ansible modules for automating **Xike (å
 
 ### Key Features
 
-- **17 module files** covering L2, L3, routing, security, and Xike-specific features
+- **18 module files** covering L2, L3, routing, security, and Xike-specific features
 - **Hybrid port mode** â€” a Xike-specific feature for flexible VLAN tagging
 - **ERPS/EAPS** ring protection for carrier-grade Ethernet
 - **QinQ tunneling** for service provider deployments
@@ -116,7 +116,7 @@ ansible-galaxy collection install c1emon.xikeos
 git clone https://github.com/c1emon/ansible-collection-xike.git
 cd ansible-collection-xike
 ansible-galaxy collection build
-ansible-galaxy collection install c1emon-xikeos-0.1.0.tar.gz
+ansible-galaxy collection install c1emon-xikeos-0.2.0.tar.gz
 ```
 
 ### From Local Development Directory
@@ -161,11 +161,12 @@ Release process:
 1. Update `galaxy.yml` `version` to a new, never-published version.
 2. Commit and merge the release changes.
 3. Create and publish a GitHub Release whose tag matches `galaxy.yml` version;
-   a leading `v` is allowed, for example `v0.1.0` for `version: 0.1.0`.
+   a leading `v` is allowed, for example `v0.2.0` for `version: 0.2.0`.
 4. The release workflow runs `uv sync --group dev`, `uv run pytest tests/unit`,
-   verifies the release tag matches `galaxy.yml`, builds the collection with
-   `uv run ansible-galaxy collection build --force`, and publishes the generated
-   `c1emon-xikeos-<version>.tar.gz` with the configured Galaxy API key.
+   verifies the release tag matches `galaxy.yml`, confirms the exact
+   `c1emon-xikeos-<version>.tar.gz` tarball exists after build, builds the
+   collection with `uv run ansible-galaxy collection build --force`, and
+   publishes the generated tarball with the configured Galaxy API key.
 
 Galaxy collection versions are immutable: once a version is published, it cannot
 be replaced by rerunning the workflow. If a release needs changes, bump
@@ -216,7 +217,7 @@ all:
 ### 3. Run It
 
 ```bash
-ansible-playbook -i inventory.yml create_vlans.yml
+uv run ansible-playbook -i inventory.yml create_vlans.yml
 ```
 
 ## Inventory Setup
@@ -902,13 +903,13 @@ all:
 
 ```bash
 # Prompt for vault password
-ansible-playbook -i inventory.yml deploy_switch.yml --ask-vault-pass
+uv run ansible-playbook -i inventory.yml deploy_switch.yml --ask-vault-pass
 
 # Use vault password file
-ansible-playbook -i inventory.yml deploy_switch.yml --vault-password-file ~/.vault_pass
+uv run ansible-playbook -i inventory.yml deploy_switch.yml --vault-password-file ~/.vault_pass
 
 # Use multiple vault IDs
-ansible-playbook -i inventory.yml deploy_switch.yml --vault-id prod@prompt
+uv run ansible-playbook -i inventory.yml deploy_switch.yml --vault-id prod@prompt
 ```
 
 ## Cisco IOS Comparison

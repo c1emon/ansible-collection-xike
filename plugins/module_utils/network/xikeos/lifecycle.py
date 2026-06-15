@@ -9,6 +9,7 @@ if TYPE_CHECKING:
 
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.errors import XikeOSError
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.reconcile import ReconciliationError
 
 
 DEFAULT_MUTATING_STATES: tuple[str, ...] = ("merged", "replaced", "overridden", "deleted")
@@ -33,7 +34,7 @@ def gather_with_error_boundary(
             msg=msg,
             error=str(exc),
             detail=getattr(exc, "detail", None),
-            context=getattr(exc, "context", context),
+            context=getattr(exc, "context", None) or context,
         )
         module.fail_json(
             **payload,
@@ -105,7 +106,17 @@ def run_resource_module_lifecycle(
     }
 
     if state in rendered_states:
-        commands = build_commands(config, state, [] if rendered_current is None else rendered_current)
+        try:
+            commands = build_commands(config, state, [] if rendered_current is None else rendered_current)
+        except ReconciliationError as exc:
+            module.fail_json(
+                msg="failed to plan resource commands",
+                changed=False,
+                commands=[],
+                error=str(exc),
+                context="resource planning",
+            )
+            return
         module.exit_json(changed=False, commands=commands, **{rendered_key: commands})
 
     try:
@@ -136,10 +147,37 @@ def run_resource_module_lifecycle(
         result["after"] = before
         module.exit_json(**result)
 
-    commands = build_commands(config, state, before)
+    try:
+        commands = build_commands(config, state, before)
+    except ReconciliationError as exc:
+        module.fail_json(
+            msg="failed to plan resource commands",
+            changed=False,
+            commands=[],
+            before=before,
+            after=before,
+            error=str(exc),
+            context="resource planning",
+        )
+        return
     result["commands"] = commands
     result["changed"] = bool(commands)
-    result["after"] = build_after(before, config, state) if commands else before
+    if commands:
+        try:
+            result["after"] = build_after(before, config, state)
+        except ReconciliationError as exc:
+            module.fail_json(
+                msg="failed to plan resource commands",
+                changed=False,
+                commands=commands,
+                before=before,
+                after=before,
+                error=str(exc),
+                context="resource planning",
+            )
+            return
+    else:
+        result["after"] = before
 
     if module.check_mode:
         module.exit_json(**result)
