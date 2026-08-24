@@ -95,6 +95,42 @@ def test_merged_set_fields_do_not_remove_current_only_items():
     assert ops[0].value == "0/0/3"
 
 
+def test_ordered_fields_preserve_merge_order_and_replace_as_one_operation():
+    policy = ResourcePolicy(
+        identity=("acl_id",),
+        fields={
+            "rules": FieldPolicy(
+                kind="ordered",
+                identity=("action", "protocol", "source", "destination"),
+            )
+        },
+    )
+    current = {
+        10: {
+            "acl_id": 10,
+            "rules": [
+                {"action": "permit", "protocol": "ip", "source": "10.0.0.0", "destination": "any"},
+            ],
+        }
+    }
+    desired = {
+        10: {
+            "acl_id": 10,
+            "rules": [
+                {"action": "deny", "protocol": "ip", "source": "any", "destination": "any"},
+                {"action": "permit", "protocol": "ip", "source": "10.0.0.0", "destination": "any"},
+            ],
+        }
+    }
+
+    merged = plan_operations(current, desired, "merged", policy)
+    replaced = plan_operations(current, desired, "replaced", policy)
+
+    assert [operation.action for operation in merged] == ["add_item"]
+    assert [operation.action for operation in replaced] == ["replace_ordered"]
+    assert apply_operations_to_state(current, replaced, policy)[10]["rules"] == desired[10]["rules"]
+
+
 def test_replaced_only_updates_listed_resources_and_explicit_fields():
     policy = ResourcePolicy(
         identity=("name",),

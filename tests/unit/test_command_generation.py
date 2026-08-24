@@ -21,6 +21,7 @@ from ansible_collections.c1emon.xikeos.plugins.modules.xikeos_vlans import (
     vlan_id_range,
 )
 from ansible_collections.c1emon.xikeos.plugins.modules.xikeos_acls import (
+    build_lifecycle_plan as acl_lifecycle_plan,
     build_lifecycle_commands as acl_lifecycle_commands,
 )
 from ansible_collections.c1emon.xikeos.plugins.modules.xikeos_interfaces import (
@@ -361,6 +362,38 @@ class TestAclLifecycleRegressions:
         ]
 
         assert acl_lifecycle_commands([existing[0]], "replaced", existing) == []
+
+    def test_replaced_acl_order_change_is_one_whole_acl_transition(self):
+        before = [
+            {
+                "acl_id": 10,
+                "acl_type": "standard",
+                "rules": [
+                    {"action": "permit", "source": "10.0.0.0"},
+                    {"action": "deny", "source": "any"},
+                ],
+            }
+        ]
+        desired = [
+            {
+                "acl_id": 10,
+                "acl_type": "standard",
+                "rules": [
+                    {"action": "deny", "source": "any"},
+                    {"action": "permit", "source": "10.0.0.0"},
+                ],
+            }
+        ]
+
+        plan = acl_lifecycle_plan(desired, "replaced", before)
+
+        assert [operation.action for operation in plan.operations] == ["replace_ordered"]
+        assert plan.commands == (
+            "no access-list 10",
+            "access-list 10 deny any",
+            "access-list 10 permit 10.0.0.0",
+        )
+        assert [rule["action"] for rule in plan.after[0]["rules"]] == ["deny", "permit"]
 
     def test_positional_acl_rejects_sequence_and_remarks_before_rendering(self):
         invalid_sequence = [{"acl_id": 1, "acl_type": "standard", "rules": [{"sequence": 10, "action": "permit", "source": "any"}]}]

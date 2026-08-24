@@ -1,5 +1,11 @@
 ancestor: null
 releases:
+  0.2.2:
+    changes:
+      release_summary: Complete evidence-gated reconciliation safety migration.
+      major_changes:
+        - Static routes and positional ACLs now use sealed shared reconciliation plans, including ordered-rule replacement.
+        - Release automation rejects a Galaxy version that is already published before upload.
   0.2.1:
     changes:
       release_summary: Harden resource reconciliation, mutation safety, and validation gates.

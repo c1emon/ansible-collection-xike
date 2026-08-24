@@ -232,6 +232,7 @@ from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.recon
     ReconciliationInputError,
     ResourcePlan,
     ResourcePolicy,
+    plan_operations,
     seal_resource_plan,
 )
 from typing import Any
@@ -241,8 +242,15 @@ AclConfig = dict[str, Any]
 RuleKey = tuple[Any, Any, Any, Any]
 
 ACL_POLICY = ResourcePolicy(
-    identity=("acl_id",),
-    fields={"definition": FieldPolicy(kind="scalar", removal_supported=False)},
+    identity=("acl_id", "acl_type"),
+    fields={
+        "rules": FieldPolicy(
+            kind="ordered",
+            identity=("action", "protocol", "source", "destination"),
+            removal_supported=False,
+        ),
+        "present": FieldPolicy(kind="scalar", removal_supported=False),
+    },
 )
 
 # Valid ACL ID ranges
@@ -340,27 +348,7 @@ def build_acl_commands(
     Returns:
         list: CLI commands to apply
     """
-    _validate_positional_acl_config(config)
-    commands: list[str] = []
-
-    # Build existing ACL map
-    existing_by_id: dict[int, AclConfig] = {}
-    for acl in existing_acls:
-        existing_by_id[acl["acl_id"]] = acl
-
-    for acl_config in config:
-        acl_id = acl_config["acl_id"]
-        acl_type = acl_config.get("acl_type", "standard")
-        rules = acl_config.get("rules", [])
-
-        existing = existing_by_id.get(acl_id, {})
-        existing_rules = existing.get("rules", [])
-
-        # Build rule commands
-        rule_cmds = _build_rule_commands(acl_id, acl_type, rules, existing_rules)
-        commands.extend(rule_cmds)
-
-    return commands
+    return list(build_lifecycle_plan(config, "merged", existing_acls).commands)
 
 
 def _build_rule_commands(
@@ -428,24 +416,7 @@ def build_delete_commands(
     Returns:
         list: CLI commands to apply
     """
-    commands: list[str] = []
-
-    if not config:
-        raise ReconciliationInputError(
-            "empty ACL deletion is unsafe; specify exact ACL identities"
-        )
-
-    # Delete specific ACLs
-    delete_ids: set[int] = set()
-    for acl_config in config:
-        delete_ids.add(acl_config["acl_id"])
-
-    for acl in existing_acls:
-        acl_id = acl["acl_id"]
-        if acl_id in delete_ids:
-            commands.append("no access-list {0}".format(acl_id))
-
-    return commands
+    return list(build_lifecycle_plan(config, "deleted", existing_acls).commands)
 
 
 def build_replaced_commands(
@@ -455,171 +426,93 @@ def build_replaced_commands(
 
     Removes existing ACLs in the config range and adds desired ones.
     """
-    _validate_positional_acl_config(config)
-    commands: list[str] = []
-
-    # Build existing ACL map
-    existing_by_id: dict[int, AclConfig] = {}
-    for acl in existing_acls:
-        existing_by_id[acl["acl_id"]] = acl
-
-    for acl_config in config:
-        acl_id = acl_config["acl_id"]
-        acl_type = acl_config.get("acl_type", "standard")
-        rules = acl_config.get("rules", [])
-
-        existing = existing_by_id.get(acl_id)
-        desired_rule_keys = [rule_key(rule) for rule in rules]
-        existing_rule_keys = (
-            [rule_key(rule) for rule in existing.get("rules", [])] if existing else []
-        )
-        if (
-            existing
-            and existing.get("acl_type") == acl_type
-            and existing_rule_keys == desired_rule_keys
-        ):
-            continue
-
-        # The positional model cannot safely make an in-place ordered edit.
-        if existing:
-            commands.append("no access-list {0}".format(acl_id))
-
-        # Add all rules as new
-        for rule in rules:
-            cmd = _build_access_list_cmd(acl_id, acl_type, rule)
-            if cmd:
-                commands.append(cmd)
-
-    return commands
+    return list(build_lifecycle_plan(config, "replaced", existing_acls).commands)
 
 
-def _build_after_state_legacy(
-    before: list[AclConfig],
-    desired: list[AclConfig],
-    state: str,
-) -> list[AclConfig]:
-    """Build a normalized simulated after-state for ACL lifecycle results."""
-    _validate_positional_acl_config(desired)
-    after_by_id = {acl["acl_id"]: dict(acl) for acl in before}
+def _acl_state_for_plan(acls: list[AclConfig], label: str) -> dict[tuple[int, str], AclConfig]:
+    """Canonicalize positional ACL facts for shared ordered reconciliation."""
+    _validate_positional_acl_config(acls)
+    state: dict[tuple[int, str], AclConfig] = {}
+    for acl in acls:
+        key = (acl["acl_id"], acl["acl_type"])
+        if key in state:
+            raise ReconciliationInputError("duplicate ACL identity: {0}".format(key))
+        rules = []
+        for rule in acl.get("rules", []):
+            normalized_rule = dict(rule)
+            normalized_rule.setdefault("protocol", "ip")
+            normalized_rule.setdefault("destination", "any")
+            rules.append(normalized_rule)
+        state[key] = {
+            "acl_id": acl["acl_id"],
+            "acl_type": acl["acl_type"],
+            "rules": rules,
+            "present": True,
+        }
+    return state
 
-    if state in ("merged", "replaced"):
-        for acl in desired:
-            acl_id = acl["acl_id"]
-            if state == "replaced" or acl_id not in after_by_id:
-                after_by_id[acl_id] = dict(acl)
-                after_by_id[acl_id]["rules"] = list(acl.get("rules", []))
-                continue
-            existing = after_by_id[acl_id]
-            existing_rules = list(existing.get("rules", []))
-            existing_keys = {rule_key(rule) for rule in existing_rules}
-            for rule in acl.get("rules", []):
-                if rule_key(rule) not in existing_keys:
-                    existing_rules.append(rule)
-            existing["rules"] = existing_rules
-    elif state == "deleted":
-        if desired:
-            for acl in desired:
-                after_by_id.pop(acl["acl_id"], None)
-        else:
-            raise ReconciliationInputError(
-                "empty ACL deletion is unsafe; specify exact ACL identities"
+
+def _public_acl_state(state: dict[Any, AclConfig]) -> list[AclConfig]:
+    """Return the documented ACL fact shape without planner-only presence."""
+    public = []
+    for acl in state.values():
+        if acl.get("present", True):
+            public.append(
+                {
+                    "acl_id": acl["acl_id"],
+                    "acl_type": acl["acl_type"],
+                    "rules": [dict(rule) for rule in acl.get("rules", [])],
+                }
             )
-
-    return [after_by_id[acl_id] for acl_id in sorted(after_by_id)]
-
-
-def _acl_plan_operations(
-    config: list[AclConfig],
-    state: str,
-    existing_acls: list[AclConfig],
-) -> list[Operation]:
-    """Plan ACL transitions without placing CLI strings in the operation data."""
-    _validate_positional_acl_config(config)
-    existing_by_id = {acl["acl_id"]: acl for acl in existing_acls}
-    if state == "deleted" and not config:
-        raise ReconciliationInputError(
-            "empty ACL deletion is unsafe; specify exact ACL identities"
-        )
-    operations: list[Operation] = []
-    for acl in config:
-        acl_id = acl["acl_id"]
-        existing = existing_by_id.get(acl_id)
-        mode = "merged" if state == "rendered" else state
-        if mode == "deleted":
-            if existing is None and state != "rendered":
-                continue
-        elif mode == "merged":
-            if existing is not None and not _build_rule_commands(
-                acl_id,
-                acl.get("acl_type", "standard"),
-                acl.get("rules", []),
-                existing.get("rules", []),
-            ):
-                continue
-        elif mode == "replaced":
-            existing_keys = (
-                [rule_key(rule) for rule in existing.get("rules", [])]
-                if existing
-                else []
-            )
-            desired_keys = [rule_key(rule) for rule in acl.get("rules", [])]
-            if (
-                existing
-                and existing.get("acl_type") == acl.get("acl_type", "standard")
-                and existing_keys == desired_keys
-            ):
-                continue
-        operations.append(
-            Operation(
-                "set_field",
-                (("acl_id", acl_id),),
-                "definition",
-                {"mode": mode, "desired": dict(acl), "existing": dict(existing or {})},
-            )
-        )
-    return operations
+    return sorted(public, key=lambda acl: (acl["acl_id"], acl["acl_type"]))
 
 
 def _render_acl_operation(operation: Operation) -> list[str]:
-    """Render a single ACL-level operation under the positional ACL model."""
-    payload = operation.value
-    desired = payload["desired"]
-    existing = payload["existing"]
-    acl_id = desired["acl_id"]
-    mode = payload["mode"]
-    if mode == "deleted":
+    """Render one shared ordered-policy ACL operation."""
+    resource = dict(operation.resource)
+    acl_id = resource["acl_id"]
+    acl_type = resource["acl_type"]
+    if operation.field == "present" and operation.value is False:
         return ["no access-list {0}".format(acl_id)]
-    if mode == "merged":
-        return _build_rule_commands(
-            acl_id,
-            desired.get("acl_type", "standard"),
-            desired.get("rules", []),
-            existing.get("rules", []),
-        )
-    if mode == "replaced":
-        commands = ["no access-list {0}".format(acl_id)] if existing else []
-        for rule in desired.get("rules", []):
-            command = _build_access_list_cmd(
-                acl_id, desired.get("acl_type", "standard"), rule
-            )
+    if operation.field == "rules" and operation.action == "add_item":
+        command = _build_access_list_cmd(acl_id, acl_type, operation.value)
+        if command:
+            return [command]
+    if operation.field == "rules" and operation.action == "replace_ordered":
+        commands = ["no access-list {0}".format(acl_id)]
+        for rule in operation.value:
+            command = _build_access_list_cmd(acl_id, acl_type, rule)
             if command:
                 commands.append(command)
         return commands
-    raise ReconciliationInputError("unsupported ACL plan mode: {0}".format(mode))
+    raise ReconciliationInputError("unsupported ACL operation: {0}".format(operation))
 
 
 def build_lifecycle_plan(
     config: list[AclConfig], state: str, existing_acls: list[AclConfig]
 ) -> ResourcePlan:
-    """Build an immutable plan that acknowledges every ACL device mutation."""
-    operations = _acl_plan_operations(config, state, existing_acls)
-    plan = seal_resource_plan({}, operations, ACL_POLICY, _render_acl_operation, state)
-    return ResourcePlan(
-        plan.operations,
-        plan.commands,
-        _build_after_state_legacy(existing_acls, config, state),
-        plan.changed,
+    """Build an immutable plan under the admitted positional ACL model."""
+    current = _acl_state_for_plan(existing_acls, "current")
+    desired = _acl_state_for_plan(config, "desired")
+    if state == "deleted":
+        if not config:
+            raise ReconciliationInputError(
+                "empty ACL deletion is unsafe; specify exact ACL identities"
+            )
+        desired = {
+            key: {"acl_id": value["acl_id"], "acl_type": value["acl_type"], "present": False}
+            for key, value in desired.items()
+        }
+        planning_state = "replaced"
+    elif state in ("merged", "replaced", "rendered"):
+        planning_state = state
+    else:
+        raise ReconciliationInputError("unsupported ACL lifecycle state: {0}".format(state))
+    operations = plan_operations(current, desired, planning_state, ACL_POLICY)
+    plan = seal_resource_plan(
+        current, operations, ACL_POLICY, _render_acl_operation, state
     )
+    return ResourcePlan(plan.operations, plan.commands, _public_acl_state(plan.after), plan.changed)
 
 
 def build_after_state(

@@ -50,6 +50,22 @@ jobs:
           fi
           echo "galaxy_version=$galaxy_version" >> "$GITHUB_ENV"
 
+      - name: Reject an already-published Galaxy version
+        run: |
+          version_url="https://galaxy.ansible.com/api/v3/plugin/ansible/content/published/collections/index/c1emon/xikeos/versions/${galaxy_version}/"
+          status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "$version_url")"
+          case "$status" in
+            404) ;;
+            200)
+              echo "Galaxy version ${galaxy_version} is already published. Bump galaxy.yml before release."
+              exit 1
+              ;;
+            *)
+              echo "Could not verify Galaxy version availability (HTTP ${status}); refusing to publish."
+              exit 1
+              ;;
+          esac
+
       - name: Install Ansible collection dependencies
         run: .venv/bin/ansible-galaxy collection install 'ansible.netcommon:>=5.0.0' -p .ansible/collections
 

@@ -47,9 +47,10 @@ class FieldPolicy:
     """Describe reconciliation semantics for one resource field.
 
     Args:
-        kind: ``"scalar"`` for single-value fields, or ``"set"`` for list fields
-            whose items are compared by identity rather than list position.
-        identity: Field names used to identify set items. Empty identity means
+        kind: ``"scalar"`` for single-value fields, ``"set"`` for unordered
+            identity-based lists, or ``"ordered"`` for identity-validated lists
+            whose order is part of the desired state.
+        identity: Field names used to identify list items. Empty identity means
             the item itself is its identity, which is useful for scalar list
             items such as LAG member port strings.
         removal_supported: Whether the field can be removed/unset. If false,
@@ -67,6 +68,10 @@ class FieldPolicy:
         LAG members are string set items::
 
             FieldPolicy(kind="set", identity=())
+
+        Positional ACL rules are ordered items::
+
+            FieldPolicy(kind="ordered", identity=("action", "protocol", "source", "destination"))
     """
 
     kind: str
@@ -74,7 +79,7 @@ class FieldPolicy:
     removal_supported: bool = True
 
     def __post_init__(self) -> None:
-        if self.kind not in {"scalar", "set"}:
+        if self.kind not in {"scalar", "set", "ordered"}:
             raise ReconciliationInputError("unsupported field kind: {0}".format(self.kind))
         if not isinstance(self.identity, tuple):
             self.identity = tuple(self.identity)
@@ -409,6 +414,27 @@ def plan_operations(
             desired_by_id = dict(desired_items)
             current_by_id = dict(current_items)
 
+            if field_policy.kind == "ordered":
+                desired_order = [identity for identity, _item in desired_items]
+                current_order = [identity for identity, _item in current_items]
+                if state == "merged":
+                    for item_identity_value, item in desired_items:
+                        if item_identity_value not in current_by_id:
+                            operations.append(
+                                Operation("add_item", resource_key, field_name, deepcopy(item))
+                            )
+                    continue
+                if current_order != desired_order:
+                    operations.append(
+                        Operation(
+                            "replace_ordered",
+                            resource_key,
+                            field_name,
+                            [deepcopy(item) for _identity, item in desired_items],
+                        )
+                    )
+                continue
+
             if state == "merged":
                 for item_identity_value in sorted(desired_by_id, key=_sort_token):
                     if item_identity_value not in current_by_id:
@@ -508,6 +534,23 @@ def apply_operations_to_state(
             resource_state.pop(operation.field, None)
             continue
 
+        if operation.action == "replace_ordered":
+            if field_policy.kind != "ordered":
+                raise ReconciliationInputError(
+                    "replace_ordered requires an ordered field: {0}".format(operation.field)
+                )
+            resource_state[operation.field] = [
+                deepcopy(item)
+                for _identity, item in _normalize_set_items(
+                    operation.value,
+                    field_policy,
+                    "operation",
+                    operation.resource,
+                    operation.field,
+                )
+            ]
+            continue
+
         if operation.action not in {"add_item", "remove_item"}:
             raise ReconciliationInputError("unsupported operation action: {0}".format(operation.action))
 
@@ -519,6 +562,27 @@ def apply_operations_to_state(
             by_identity[payload_identity] = deepcopy(operation.value)
         else:
             by_identity.pop(payload_identity, None)
+
+        if field_policy.kind == "ordered":
+            resource_state[operation.field] = [
+                deepcopy(item)
+                for _identity, item in _normalize_set_items(
+                    resource_state.get(operation.field, []),
+                    field_policy,
+                    "state",
+                    operation.resource,
+                    operation.field,
+                )
+            ]
+            if operation.action == "add_item":
+                resource_state[operation.field].append(deepcopy(operation.value))
+            else:
+                resource_state[operation.field] = [
+                    item
+                    for item in resource_state[operation.field]
+                    if item_identity(item, field_policy) != payload_identity
+                ]
+            continue
 
         resource_state[operation.field] = [deepcopy(by_identity[item_identity_key]) for item_identity_key in sorted(by_identity, key=_sort_token)]
 

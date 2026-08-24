@@ -1,6 +1,6 @@
 # c1emon.xikeos Ansible Collection
 
-[![Version](https://img.shields.io/badge/version-0.2.1-blue.svg)](https://github.com/c1emon/ansible-collection-xike)
+[![Version](https://img.shields.io/badge/version-0.2.2-blue.svg)](https://github.com/c1emon/ansible-collection-xike)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![Ansible](https://img.shields.io/badge/ansible--core-2.20--2.21-red.svg)](https://www.ansible.com/)
 [![Python](https://img.shields.io/badge/Python-3.12--3.14-blue.svg)](https://www.python.org/)
@@ -118,7 +118,7 @@ ansible-galaxy collection install c1emon.xikeos
 git clone https://github.com/c1emon/ansible-collection-xike.git
 cd ansible-collection-xike
 ansible-galaxy collection build
-ansible-galaxy collection install c1emon-xikeos-0.2.1.tar.gz
+ansible-galaxy collection install c1emon-xikeos-0.2.2.tar.gz
 ```
 
 ### From Local Development Directory
@@ -157,9 +157,10 @@ Release process:
 1. Update `galaxy.yml` `version` to a new, never-published version.
 2. Commit and merge the release changes.
 3. Create and publish a GitHub Release whose tag matches `galaxy.yml` version;
-   a leading `v` is allowed, for example `v0.2.1` for `version: 0.2.1`.
+   a leading `v` is allowed, for example `v0.2.2` for `version: 0.2.2`.
 4. The release workflow runs `uv sync --group dev`, `uv run pytest tests/unit`,
-   verifies the release tag matches `galaxy.yml`, confirms the exact
+   verifies the release tag matches `galaxy.yml`, rejects a version already
+   published to Galaxy, confirms the exact
    `c1emon-xikeos-<version>.tar.gz` tarball exists after build, builds the
    collection with `uv run ansible-galaxy collection build --force`, and
    publishes the generated tarball with the configured Galaxy API key.
@@ -535,15 +536,8 @@ all:
         route_type: ipv4
     state: merged
 
-# Add IPv6 static route
-- name: Configure IPv6 route
-  c1emon.xikeos.xikeos_static_routes:
-    config:
-      - destination: "2001:db8::"
-        mask: "48"
-        next_hop: "2001:db8::1"
-        route_type: ipv6
-    state: merged
+# IPv6 static-route mutation is intentionally rejected until command and
+# gather evidence is admitted for the target platform.
 ```
 
 ### ACLs
@@ -555,13 +549,10 @@ all:
     config:
       - acl_id: 100
         acl_type: standard
-        remark: Permit internal networks
         rules:
-          - sequence: 10
-            action: permit
+          - action: permit
             source: 192.168.0.0 0.0.255.255
-          - sequence: 20
-            action: deny
+          - action: deny
             source: any
     state: merged
 
@@ -571,10 +562,8 @@ all:
     config:
       - acl_id: 1001
         acl_type: mac
-        remark: Filter by MAC address
         rules:
-          - sequence: 10
-            action: permit
+          - action: permit
             source: 0011.2233.4455
             destination: 0000.0000.0000
     state: merged
@@ -585,10 +574,8 @@ all:
     config:
       - acl_id: 2001
         acl_type: mixed
-        remark: Web traffic filter
         rules:
-          - sequence: 10
-            action: permit
+          - action: permit
             protocol: tcp
             source: 192.168.1.0 0.0.0.255
             destination: any

@@ -393,7 +393,8 @@ passive-interface vlan-interface 10
 
 Manage static routes on Xike OS devices.
 
-**Purpose**: Configure IPv4 and IPv6 static routes.
+**Purpose**: Configure admitted IPv4 static routes. IPv6 static-route mutation
+is rejected until model/firmware-scoped command and gather evidence is added.
 
 **Parameters**:
 
@@ -432,15 +433,8 @@ ipv6 route 2001:db8::/32 2001:db8::1
         route_type: ipv4
     state: merged
 
-# IPv6 static route
-- name: Configure IPv6 route
-  c1emon.xikeos.xikeos_static_routes:
-    config:
-      - destination: "2001:db8::"
-        mask: "48"
-        next_hop: "2001:db8::1"
-        route_type: ipv6
-    state: merged
+# IPv6 static-route mutation is fail-closed; use state: gathered to inspect
+# facts until target-specific command/gather evidence is admitted.
 ```
 
 ---
@@ -460,9 +454,9 @@ Manage Access Control Lists on Xike OS devices.
 | `config` | list | - | No | - | List of ACL configurations |
 | `config[].acl_id` | int | - | Yes | - | ACL identifier number |
 | `config[].acl_type` | str | - | Yes | `standard`, `mac`, `mixed` | Type of ACL |
-| `config[].remark` | str | `""` | No | - | ACL description |
+| `config[].remark` | str | - | No | - | Rejected: no admitted render/gather syntax |
 | `config[].rules` | list | - | No | - | List of ACL rules |
-| `config[].rules[].sequence` | int | - | No | - | Sequence number (1-65535) |
+| `config[].rules[].sequence` | int | - | No | - | Rejected: positional ACL model cannot round-trip sequence |
 | `config[].rules[].action` | str | - | Yes | `permit`, `deny` | Action to take |
 | `config[].rules[].protocol` | str | `ip` | No | - | Protocol to match |
 | `config[].rules[].source` | str | - | Yes | - | Source address |
@@ -478,6 +472,10 @@ Manage Access Control Lists on Xike OS devices.
 - `merged`: Create or update ACLs
 - `replaced`: Replace ACL configuration
 - `deleted`: Delete ACLs
+
+ACL rule order is positional. `sequence`, ACL-level `remark`, and rule-level
+`remark` are rejected rather than silently ignored because their round-trip
+syntax is not admitted by the command evidence register.
 
 **CLI Commands Generated**:
 
@@ -506,13 +504,10 @@ access-list 2001 deny tcp any any
     config:
       - acl_id: 100
         acl_type: standard
-        remark: Permit internal networks
         rules:
-          - sequence: 10
-            action: permit
+          - action: permit
             source: 192.168.0.0 0.0.255.255
-          - sequence: 20
-            action: deny
+          - action: deny
             source: any
     state: merged
 
@@ -522,10 +517,8 @@ access-list 2001 deny tcp any any
     config:
       - acl_id: 2001
         acl_type: mixed
-        remark: Web traffic filter
         rules:
-          - sequence: 10
-            action: permit
+          - action: permit
             protocol: tcp
             source: 192.168.1.0 0.0.0.255
             destination: any
