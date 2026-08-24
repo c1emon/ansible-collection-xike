@@ -43,3 +43,5 @@ collections/
 
 # Agent/local tooling
 .opencode
+.claude/
+CLAUDE.md
