@@ -35,10 +35,10 @@ playbooks, inventory values, and local test collection paths.
 - **THEN** the FQCN MUST resolve to modules from `c1emon.xikeos`.
 
 #### Scenario: Developer runs local live playbooks
-- **WHEN** a developer uses `.test_path` to expose the source checkout as a
-  local collection
-- **THEN** the setup instructions MUST place the checkout under
-  `.test_path/ansible_collections/c1emon/xikeos`.
+- **WHEN** a developer exposes the source checkout as a local collection
+- **THEN** the setup instructions MUST create a process-owned temporary
+  namespace containing `ansible_collections/c1emon/xikeos` and MUST NOT create
+  or reuse a persistent `.test_path` symlink.
 
 ### Requirement: Terminal plugin handles Xike OS CLI interaction
 The collection SHALL provide a terminal plugin that recognizes supported Xike OS prompts, disables paging where possible, and detects command errors.

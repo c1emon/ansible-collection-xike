@@ -23,13 +23,15 @@ inventory that defines the `xike_switches` group.
 
 ## Run commands
 
-When running directly from this source checkout, expose it as a local Ansible
-collection under `.test_path` first:
+When running directly from this source checkout, expose it through a
+process-owned temporary collection namespace. Do not create or reuse a
+persistent `.test_path` symlink:
 
 ```bash
-mkdir -p .test_path/ansible_collections/c1emon
-ln -sfn "$PWD" .test_path/ansible_collections/c1emon/xikeos
-export ANSIBLE_COLLECTIONS_PATH=.test_path
+collection_namespace="$(mktemp -d "${TMPDIR:-/tmp}/xikeos-live.XXXXXX")"
+mkdir -p "$collection_namespace/ansible_collections/c1emon"
+ln -s "$PWD" "$collection_namespace/ansible_collections/c1emon/xikeos"
+export ANSIBLE_COLLECTIONS_PATH="$collection_namespace"
 export XIKEOS_PASSWORD='your-login-password'
 export XIKEOS_ENABLE_PASSWORD='your-enable-password'  # optional; defaults to XIKEOS_PASSWORD
 ```
