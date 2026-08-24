@@ -12,6 +12,7 @@ htmlcov/
 # Python packaging/build artifacts
 build/
 dist/
+node_modules/
 .eggs/
 *.egg-info/
 *.egg

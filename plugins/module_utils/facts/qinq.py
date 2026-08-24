@@ -1,11 +1,14 @@
 """QinQ facts module for Xike OS."""
 
 from __future__ import absolute_import, division, print_function
+
 __metaclass__ = type
+# pylint: disable=unsupported-binary-operation
 
 from typing import Any
 
 import re
+
 
 def parse_qinq_output(output: str | None) -> dict[str, Any]:
     """
@@ -73,10 +76,12 @@ def parse_qinq_output(output: str | None) -> dict[str, Any]:
             re.IGNORECASE,
         )
         if match:
-            facts["vlan_pass_throughs"].append({
-                "start_vlan": int(match.group(1)),
-                "end_vlan": int(match.group(2)),
-            })
+            facts["vlan_pass_throughs"].append(
+                {
+                    "start_vlan": int(match.group(1)),
+                    "end_vlan": int(match.group(2)),
+                }
+            )
             continue
 
         # VLAN swap: vlan swap <start> <end> <swap> [priority <value>]

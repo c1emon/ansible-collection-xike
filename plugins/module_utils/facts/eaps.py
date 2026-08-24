@@ -1,14 +1,16 @@
-#!/usr/bin/python
 # -*- coding: utf-8 -*-
 
 """EAPS facts module for Xike OS."""
 
 from __future__ import absolute_import, division, print_function
+
 __metaclass__ = type
+# pylint: disable=unsupported-binary-operation
 
 from typing import Any
 
 import re
+
 
 def parse_eaps_brief(output: str | None) -> dict[str, list[dict[str, Any]]]:
     """
@@ -49,11 +51,13 @@ def parse_eaps_brief(output: str | None) -> dict[str, list[dict[str, Any]]]:
             control_vlan = int(match.group(2))
             work_mode = match.group(3).lower().replace(" ", "-")
 
-            facts["domains"].append({
-                "domain_id": domain_id,
-                "control_vlan": control_vlan,
-                "work_mode": work_mode,
-            })
+            facts["domains"].append(
+                {
+                    "domain_id": domain_id,
+                    "control_vlan": control_vlan,
+                    "work_mode": work_mode,
+                }
+            )
 
     return facts
 
@@ -107,20 +111,24 @@ def parse_eaps_topology(output: str | None) -> dict[str, list[dict[str, Any]]]:
             if domain_id not in domain_rings:
                 domain_rings[domain_id] = []
 
-            domain_rings[domain_id].append({
-                "ring_id": ring_id,
-                "role": role,
-                "port0": port0,
-                "port1": port1,
-                "status": status,
-                "enabled": enabled,
-            })
+            domain_rings[domain_id].append(
+                {
+                    "ring_id": ring_id,
+                    "role": role,
+                    "port0": port0,
+                    "port1": port1,
+                    "status": status,
+                    "enabled": enabled,
+                }
+            )
 
     for domain_id, rings in sorted(domain_rings.items()):
-        facts["domains"].append({
-            "domain_id": domain_id,
-            "rings": rings,
-        })
+        facts["domains"].append(
+            {
+                "domain_id": domain_id,
+                "rings": rings,
+            }
+        )
 
     return facts
 
@@ -219,9 +227,7 @@ def get_facts(facts_module: Any, connection: Any) -> dict[str, dict[str, Any]]:
         domain_id = domain.get("domain_id")
         if domain_id is not None:
             try:
-                stdout = connection.get(
-                    command=f"show eaps domain {domain_id}"
-                )
+                stdout = connection.get(command=f"show eaps domain {domain_id}")
                 detailed = parse_eaps_domain_detail(stdout, domain_id)
                 detailed_domains.append(detailed)
             except Exception:

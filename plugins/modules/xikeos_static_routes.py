@@ -1,10 +1,12 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
 """Xike OS Static Routes resource module."""
 
 from __future__ import absolute_import, division, print_function
 __metaclass__ = type
+# pylint: disable=unsupported-binary-operation
 
 DOCUMENTATION = """
 module: xikeos_static_routes
@@ -12,8 +14,8 @@ short_description: Manage static routes on Xike OS devices
 version_added: "0.1.0"
 description:
   - This module provides declarative management of static routes on Xike (兮克) OS devices.
-  - Manages both IPv4 and IPv6 static routes.
-  - Xike OS uses the same static route syntax as Cisco IOS.
+  - Manages evidence-admitted IPv4 static routes.
+  - IPv6 mutation is rejected until matching command and gather evidence is recorded.
 options:
   config:
     description:
@@ -26,14 +28,12 @@ options:
         description:
           - Network destination address.
           - "For IPv4: dotted-decimal format (e.g., '192.168.1.0')."
-          - "For IPv6: standard IPv6 format (e.g., '2001:db8::')."
         type: str
         required: true
       mask:
         description:
           - Subnet mask or prefix length.
           - "For IPv4: dotted-decimal mask (e.g., '255.255.255.0') or CIDR prefix (e.g., '24')."
-          - "For IPv6: prefix length as string (e.g., '64')."
         type: str
         required: true
       next_hop:
@@ -52,7 +52,7 @@ options:
         description:
           - Type of static route.
           - C(ipv4) for IPv4 static routes.
-          - C(ipv6) for IPv6 static routes.
+          - C(ipv6) is accepted only for gathered data; mutation and rendered planning fail closed.
           - If omitted, the module infers the type from C(destination) or C(next_hop).
         type: str
         choices: ['ipv4', 'ipv6']
@@ -67,7 +67,7 @@ options:
     type: str
     choices: ['merged', 'replaced', 'deleted', 'gathered', 'rendered']
     default: merged
-author: clemon
+author: "clemon (@c1emon)"
 """
 
 EXAMPLES = """
@@ -95,16 +95,7 @@ EXAMPLES = """
         route_type: ipv4
     state: merged
 
-- name: Add IPv6 static route
-  c1emon.xikeos.xikeos_static_routes:
-    config:
-      - destination: "2001:db8::"
-        mask: 32
-        next_hop: "2001:db8::1"
-        route_type: ipv6
-    state: merged
-
-- name: Replace all static routes
+- name: Synchronize listed static routes while preserving unlisted routes
   c1emon.xikeos.xikeos_static_routes:
     config:
       - destination: 0.0.0.0
@@ -120,11 +111,6 @@ EXAMPLES = """
         mask: 255.255.255.0
         next_hop: 10.0.0.2
         route_type: ipv4
-    state: deleted
-
-- name: Delete all static routes (empty config)
-  c1emon.xikeos.xikeos_static_routes:
-    config: []
     state: deleted
 """
 
@@ -160,7 +146,6 @@ commands:
   sample:
     - ip route 0.0.0.0 0.0.0.0 10.0.0.1
     - ip route 192.168.100.0 255.255.255.0 10.0.0.2 10
-    - ipv6 route 2001:db8::/32 2001:db8::1
 gathered:
   description: Static route state gathered from the device when I(state) is C(gathered).
   returned: when I(state) is C(gathered)
@@ -177,10 +162,11 @@ from ansible.module_utils.basic import AnsibleModule
 from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.static_routes import StaticRoutesFacts
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import gather_with_error_boundary, run_resource_module_lifecycle
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.reconcile import ReconciliationInputError
 from typing import Any
 
 RouteConfig = dict[str, Any]
-RouteKey = tuple[Any, Any, Any]
+RouteKey = tuple[Any, Any, Any, Any]
 
 # Valid distance range
 MIN_DISTANCE = 1
@@ -238,10 +224,32 @@ def route_key(route: RouteConfig) -> RouteKey:
     """Generate a unique key for a route entry."""
     r = normalize_route(route)
     return (
+        r.get('route_type', 'ipv4'),
         r.get('destination', ''),
         r.get('mask', ''),
-        r.get('route_type', 'ipv4'),
+        r.get('next_hop', ''),
     )
+
+
+def _normalized_route_map(routes: list[RouteConfig], label: str) -> dict[RouteKey, RouteConfig]:
+    """Validate exact route identities before a command can be rendered."""
+    normalized: dict[RouteKey, RouteConfig] = {}
+    for route in routes:
+        candidate = normalize_route(route)
+        key = route_key(candidate)
+        if key in normalized:
+            raise ReconciliationInputError(
+                'duplicate or ambiguous {0} static route identity: {1}'.format(label, key)
+            )
+        normalized[key] = candidate
+    return normalized
+
+
+def _reject_unadmitted_ipv6(routes: list[RouteConfig], state: str) -> None:
+    if any(normalize_route(route).get('route_type') == 'ipv6' for route in routes):
+        raise ReconciliationInputError(
+            'IPv6 static-route {0} is not admitted by the command evidence register'.format(state)
+        )
 
 
 def build_static_route_commands(
@@ -259,22 +267,19 @@ def build_static_route_commands(
     """
     commands: list[str] = []
 
-    # Normalize existing routes for comparison
-    existing_by_key: dict[RouteKey, RouteConfig] = {}
-    for route in existing_routes:
-        key = route_key(route)
-        existing_by_key[key] = route
+    _reject_unadmitted_ipv6(config, 'configuration')
+    existing_by_key = _normalized_route_map(existing_routes, 'current')
+    desired_by_key = _normalized_route_map(config, 'desired')
 
-    for route in config:
-        normalized_route = normalize_route(route)
-        existing = existing_by_key.get(route_key(normalized_route))
+    for key in sorted(desired_by_key):
+        normalized_route = desired_by_key[key]
+        existing = existing_by_key.get(key)
         if existing:
-            existing = normalize_route(existing)
-            if (
-                existing.get('next_hop') == normalized_route.get('next_hop')
-                and existing.get('distance', 1) == normalized_route.get('distance', 1)
-            ):
+            if existing.get('distance', 1) == normalized_route.get('distance', 1):
                 continue
+            raise ReconciliationInputError(
+                'cannot safely replace static-route distance without an exact delete form: {0}'.format(key)
+            )
         route_type = normalized_route.get('route_type', 'ipv4')
         destination = normalized_route.get('destination', '')
         mask = normalized_route.get('mask', '')
@@ -310,41 +315,30 @@ def build_delete_commands(
     Returns:
         list: CLI commands to apply
     """
-    commands: list[str] = []
-
-    # Create set of routes to delete
-    delete_keys: set[RouteKey] = set()
-    for route in config:
-        delete_keys.add(route_key(route))
-
-    # If config is empty, delete all static routes
     if not config:
-        for route in existing_routes:
-            route = normalize_route(route)
-            route_type = route.get('route_type', 'ipv4')
-            destination = route.get('destination', '')
-            mask = route.get('mask', '')
-            next_hop = route.get('next_hop', '')
+        raise ReconciliationInputError('empty static-route deletion is unsafe; specify exact routes')
+    _reject_unadmitted_ipv6(config, 'deletion')
+    commands: list[str] = []
+    existing_by_key = _normalized_route_map(existing_routes, 'current')
+    desired_by_key = _normalized_route_map(config, 'desired')
 
-            cmd = _build_no_route_cmd(route_type, destination, mask, next_hop)
-            if cmd:
-                commands.append(cmd)
-        return commands
-
-    # Delete specific routes
-    for route in existing_routes:
-        key = route_key(route)
-        if key in delete_keys:
-            route = normalize_route(route)
-            route_type = route.get('route_type', 'ipv4')
-            destination = route.get('destination', '')
-            mask = route.get('mask', '')
-            next_hop = route.get('next_hop', '')
-
-            cmd = _build_no_route_cmd(route_type, destination, mask, next_hop)
-            if cmd:
-                commands.append(cmd)
-
+    for key in sorted(desired_by_key):
+        existing = existing_by_key.get(key)
+        if existing is None:
+            continue
+        desired = desired_by_key[key]
+        if existing.get('distance', 1) != desired.get('distance', 1):
+            raise ReconciliationInputError(
+                'cannot safely delete static route with an ambiguous distance: {0}'.format(key)
+            )
+        cmd = _build_no_route_cmd(
+            existing.get('route_type', 'ipv4'),
+            existing.get('destination', ''),
+            existing.get('mask', ''),
+            existing.get('next_hop', ''),
+        )
+        if cmd:
+            commands.append(cmd)
     return commands
 
 
@@ -367,25 +361,9 @@ def build_replaced_commands(
 ) -> list[str]:
     """Build CLI commands for 'replaced' state.
 
-    Removes all existing static routes and adds the desired ones.
+    Synchronizes only desired route identities and preserves unlisted routes.
     """
-    commands: list[str] = []
-
-    # First, delete all existing routes
-    for route in existing_routes:
-        route_type = route.get('route_type', 'ipv4')
-        destination = route.get('destination', '')
-        mask = route.get('mask', '')
-        next_hop = route.get('next_hop', '')
-
-        cmd = _build_no_route_cmd(route_type, destination, mask, next_hop)
-        if cmd:
-            commands.append(cmd)
-
-    # Then add desired routes
-    commands.extend(build_static_route_commands(config, []))
-
-    return commands
+    return build_static_route_commands(config, existing_routes)
 
 
 def build_lifecycle_commands(
@@ -409,10 +387,7 @@ def build_after_state(
     state: str,
 ) -> list[RouteConfig]:
     """Build a normalized simulated after-state for static route lifecycle results."""
-    after_by_key = {route_key(route): normalize_route(route) for route in before}
-
-    if state == 'replaced':
-        after_by_key = {}
+    after_by_key = _normalized_route_map(before, 'current')
 
     if state in ('merged', 'replaced'):
         for route in desired:
@@ -423,7 +398,7 @@ def build_after_state(
             for route in desired:
                 after_by_key.pop(route_key(route), None)
         else:
-            after_by_key = {}
+            raise ReconciliationInputError('empty static-route deletion is unsafe; specify exact routes')
 
     return [after_by_key[key] for key in sorted(after_by_key)]
 
@@ -495,7 +470,6 @@ def main() -> None:
                 distance=dict(
                     type='int',
                     default=1,
-                    choices=list(range(MIN_DISTANCE, MAX_DISTANCE + 1)),
                 ),
                 route_type=dict(
                     type='str',
@@ -528,6 +502,9 @@ def main() -> None:
                     MIN_DISTANCE, MAX_DISTANCE, distance
                 )
             )
+
+    if state == 'deleted' and not config:
+        module.fail_json(msg='empty static-route deletion is unsafe; specify exact routes')
 
     run_resource_module_lifecycle(
         module=module,

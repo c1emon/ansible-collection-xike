@@ -33,6 +33,7 @@ build_ignore:
   - '.pytest_cache'
   - '.ruff_cache'
   - '.mypy_cache'
+  - 'node_modules'
   - '.test_path'
   - '.ansible'
   - '.ansible-lint'

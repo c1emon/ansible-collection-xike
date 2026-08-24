@@ -1,5 +1,6 @@
 from __future__ import absolute_import, division, print_function
 __metaclass__ = type
+# pylint: disable=unsupported-binary-operation
 
 import json
 from typing import Protocol, cast

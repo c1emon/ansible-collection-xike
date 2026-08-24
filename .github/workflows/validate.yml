@@ -1,0 +1,77 @@
+name: Validate collection
+
+on:
+  workflow_call:
+  pull_request:
+  push:
+    branches: [main, "implement/**"]
+
+jobs:
+  support-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: matrix
+        run: echo "matrix=$(tr -d '\n' < .github/support-matrix.json)" >> "$GITHUB_OUTPUT"
+
+  unit-and-lint:
+    needs: support-matrix
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.support-matrix.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: astral-sh/setup-uv@v5
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install OpenSpec CLI
+        run: pnpm install --frozen-lockfile
+      - name: Install project and selected ansible-core
+        run: |
+          uv sync --group dev
+          uv pip install --python .venv/bin/python "ansible-core==${{ matrix.ansible_core }}"
+      - name: Install Ansible collection dependencies
+        run: .venv/bin/ansible-galaxy collection install 'ansible.netcommon:>=5.0.0' -p "$RUNNER_TEMP/collections"
+      - name: Run unit tests
+        env:
+          ANSIBLE_COLLECTIONS_PATH: ${{ runner.temp }}/collections
+        run: .venv/bin/python -m pytest tests/unit
+      - name: Run lint
+        run: .venv/bin/ansible-lint
+      - name: Run Ansible sanity in an isolated collection namespace
+        run: |
+          validation_root="$RUNNER_TEMP/xikeos-sanity"
+          mkdir -p "$validation_root/ansible_collections/c1emon"
+          rsync -a --delete \
+            --exclude .git --exclude .venv --exclude .ansible --exclude .test_path \
+            --exclude .pytest_cache --exclude .ruff_cache --exclude node_modules \
+            ./ "$validation_root/ansible_collections/c1emon/xikeos/"
+          mkdir -p "$validation_root/ansible_collections/ansible"
+          cp -a "$RUNNER_TEMP/collections/ansible_collections/ansible/netcommon" "$validation_root/ansible_collections/ansible/"
+          cp -a "$RUNNER_TEMP/collections/ansible_collections/ansible/utils" "$validation_root/ansible_collections/ansible/"
+          (
+            cd "$validation_root/ansible_collections/c1emon/xikeos"
+            "$GITHUB_WORKSPACE/.venv/bin/ansible-test" sanity --python "${{ matrix.python }}"
+          )
+      - name: Validate OpenSpec change
+        run: pnpm exec openspec validate unify-xikeos-resource-architecture-and-safety --strict
+      - name: Build collection
+        run: .venv/bin/ansible-galaxy collection build --force --output-path "$RUNNER_TEMP/build"
+      - name: Inspect built collection contents
+        run: |
+          tarball="$(find "$RUNNER_TEMP/build" -maxdepth 1 -name 'c1emon-xikeos-*.tar.gz' -print -quit)"
+          test -n "$tarball"
+          tar -tzf "$tarball" | grep -q 'plugins/module_utils/network/xikeos/reconcile.py'
+          tar -tzf "$tarball" | grep -q 'plugins/module_utils/facts/textfsm_templates/show_vlan.textfsm'
+          ! tar -tzf "$tarball" | grep -Eq '(^|/)(\.claude|CLAUDE\.md|\.venv|\.ansible|\.test_path|node_modules|tests)/'

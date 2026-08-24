@@ -9,17 +9,26 @@ import pytest
 from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.l3_interfaces import (
     parse_running_config as l3_parse_running_config,
 )
+from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.static_routes import (
+    parse_show_ip_route,
+)
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.reconcile import (
     ReconciliationInputError,
 )
 from ansible_collections.c1emon.xikeos.plugins.modules.xikeos_vlans import (
+    build_after_state as vlan_build_after_state,
     get_commands as vlan_get_commands,
     vlan_id_range,
 )
+from ansible_collections.c1emon.xikeos.plugins.modules.xikeos_acls import (
+    build_lifecycle_commands as acl_lifecycle_commands,
+)
 from ansible_collections.c1emon.xikeos.plugins.modules.xikeos_interfaces import (
+    build_after_state as interface_build_after_state,
     build_interface_commands,
 )
 from ansible_collections.c1emon.xikeos.plugins.modules.xikeos_l2_interfaces import (
+    build_after_state as l2_build_after_state,
     build_commands as l2_build_commands,
 )
 from ansible_collections.c1emon.xikeos.plugins.modules.xikeos_l3_interfaces import (
@@ -31,6 +40,11 @@ from ansible_collections.c1emon.xikeos.plugins.modules.xikeos_lag_interfaces imp
     build_after_state as lag_build_after_state,
     build_lifecycle_commands as lag_build_lifecycle_commands,
     build_trunk_commands,
+)
+from ansible_collections.c1emon.xikeos.plugins.modules.xikeos_static_routes import (
+    build_delete_commands as static_route_delete_commands,
+    build_lifecycle_commands as static_route_lifecycle_commands,
+    route_key as static_route_key,
 )
 from ansible_collections.c1emon.xikeos.plugins.modules.xikeos_ospf_v2 import (
     build_commands as ospf_build_commands,
@@ -88,6 +102,16 @@ class TestVlanCommands:
         assert "no vlan 100" in cmds
         assert "no vlan 200" in cmds
 
+    def test_replaced_preserves_unlisted_vlans_and_identical_state_is_noop(self):
+        current = [
+            {"vlan_id": 100, "name": "DATA", "state": "active"},
+            {"vlan_id": 200, "name": "VOICE", "state": "active"},
+        ]
+        desired = [{"vlan_id": 100, "name": "DATA", "state": "active"}]
+
+        assert vlan_get_commands(desired, "replaced", current) == []
+        assert vlan_build_after_state(current, desired, "replaced") == current
+
     def test_vlan_id_range_consecutive(self):
         assert vlan_id_range([1, 2, 3, 4, 5]) == "1-5"
 
@@ -134,10 +158,10 @@ class TestInterfaceCommands:
         cmds = build_interface_commands(cfg)
         assert "no shutdown" in cmds
 
-    def test_interface_mtu(self):
+    def test_interface_mtu_is_rejected_without_admitted_command_evidence(self):
         cfg = {"name": "ethernet 0/0/1", "mtu": 1500}
-        cmds = build_interface_commands(cfg)
-        assert "mtu 1500" in cmds
+        with pytest.raises(ReconciliationInputError, match="not admitted"):
+            build_interface_commands(cfg)
 
     def test_interface_no_description(self):
         cfg = {"name": "ethernet 0/0/1", "description": ""}
@@ -151,7 +175,6 @@ class TestInterfaceCommands:
             "speed": "10000",
             "duplex": "full",
             "enabled": True,
-            "mtu": 9000,
         }
         cmds = build_interface_commands(cfg)
         assert cmds == [
@@ -159,9 +182,27 @@ class TestInterfaceCommands:
             "description Server link",
             "speed 10000",
             "duplex full",
-            "mtu 9000",
             "no shutdown",
         ]
+
+    def test_replaced_preserves_unlisted_interfaces_and_omitted_fields(self):
+        before = {
+            "ethernet 0/0/1": {"name": "ethernet 0/0/1", "description": "old", "enabled": True},
+            "ethernet 0/0/2": {"name": "ethernet 0/0/2", "speed": "1000"},
+        }
+
+        after = interface_build_after_state(
+            before,
+            [{"name": "ethernet 0/0/1", "enabled": False}],
+            "replaced",
+        )
+
+        assert after["ethernet 0/0/1"] == {
+            "name": "ethernet 0/0/1",
+            "description": "old",
+            "enabled": False,
+        }
+        assert after["ethernet 0/0/2"] == {"name": "ethernet 0/0/2", "speed": "1000"}
 
 
 # ---------------------------------------------------------------------------
@@ -232,6 +273,87 @@ class TestL2HybridCommands:
         cmds = l2_build_commands(config, "merged", {})
         assert "switchport hybrid untagged vlan 50" in cmds
         assert not any("hybrid tagged vlan" in c for c in cmds)
+
+    def test_replaced_preserves_unlisted_l2_interfaces_and_supports_admitted_empty_reset(self):
+        before = {
+            "ethernet 0/0/1": {"name": "ethernet 0/0/1", "mode": "trunk", "trunk_allowed_vlan": "10,20"},
+            "ethernet 0/0/2": {"name": "ethernet 0/0/2", "mode": "access", "pvid": 100},
+        }
+        config = [{"name": "ethernet 0/0/1", "trunk_allowed_vlan": ""}]
+
+        cmds = l2_build_commands(config[0], "replaced", before)
+        after = l2_build_after_state(before, config, "replaced")
+
+        assert cmds == ["interface ethernet 0/0/1", "no switchport trunk allowed vlan"]
+        assert after["ethernet 0/0/1"]["mode"] == "trunk"
+        assert after["ethernet 0/0/1"]["trunk_allowed_vlan"] == ""
+        assert after["ethernet 0/0/2"] == {"name": "ethernet 0/0/2", "mode": "access", "pvid": 100}
+
+
+# ---------------------------------------------------------------------------
+# Static route lifecycle tests
+# ---------------------------------------------------------------------------
+
+class TestStaticRouteLifecycleRegressions:
+    """Evidence-gated route identity and deletion regression tests."""
+
+    def test_cisco_style_distance_and_ecmp_next_hops_are_preserved(self):
+        routes = parse_show_ip_route(
+            "\n".join(
+                [
+                    "S 192.0.2.0/24 [60/0] via 10.0.0.1",
+                    "S 192.0.2.0/24 [60/0] via 10.0.0.2",
+                ]
+            )
+        )
+
+        assert [route["distance"] for route in routes] == [60, 60]
+        assert static_route_key(routes[0]) != static_route_key(routes[1])
+
+    def test_identical_replaced_routes_are_noop_and_unlisted_routes_are_preserved(self):
+        existing = [
+            {"destination": "192.0.2.0", "mask": "255.255.255.0", "next_hop": "10.0.0.1", "distance": 1, "route_type": "ipv4"},
+            {"destination": "198.51.100.0", "mask": "255.255.255.0", "next_hop": "10.0.0.2", "distance": 1, "route_type": "ipv4"},
+        ]
+
+        assert static_route_lifecycle_commands([existing[0]], "replaced", existing) == []
+
+    def test_distance_change_empty_delete_and_ipv6_write_fail_closed(self):
+        existing = [{"destination": "192.0.2.0", "mask": "255.255.255.0", "next_hop": "10.0.0.1", "distance": 1, "route_type": "ipv4"}]
+        changed_distance = [{**existing[0], "distance": 10}]
+        ipv6 = [{"destination": "2001:db8::", "mask": "32", "next_hop": "2001:db8::1", "route_type": "ipv6"}]
+
+        with pytest.raises(ReconciliationInputError, match="distance"):
+            static_route_lifecycle_commands(changed_distance, "replaced", existing)
+        with pytest.raises(ReconciliationInputError, match="empty static-route deletion"):
+            static_route_delete_commands([], existing)
+        with pytest.raises(ReconciliationInputError, match="IPv6 static-route"):
+            static_route_lifecycle_commands(ipv6, "merged", [])
+
+
+# ---------------------------------------------------------------------------
+# ACL lifecycle tests
+# ---------------------------------------------------------------------------
+
+class TestAclLifecycleRegressions:
+    """ACL positional-model and idempotency regression tests."""
+
+    def test_replaced_identical_acl_is_noop_and_preserves_unlisted_acl(self):
+        existing = [
+            {"acl_id": 1, "acl_type": "standard", "rules": [{"action": "permit", "source": "any"}]},
+            {"acl_id": 2, "acl_type": "standard", "rules": [{"action": "deny", "source": "any"}]},
+        ]
+
+        assert acl_lifecycle_commands([existing[0]], "replaced", existing) == []
+
+    def test_positional_acl_rejects_sequence_and_remarks_before_rendering(self):
+        invalid_sequence = [{"acl_id": 1, "acl_type": "standard", "rules": [{"sequence": 10, "action": "permit", "source": "any"}]}]
+        invalid_remark = [{"acl_id": 1, "acl_type": "standard", "remark": "unsupported", "rules": []}]
+
+        with pytest.raises(ReconciliationInputError, match="sequence"):
+            acl_lifecycle_commands(invalid_sequence, "merged", [])
+        with pytest.raises(ReconciliationInputError, match="remarks"):
+            acl_lifecycle_commands(invalid_remark, "merged", [])
 
 
 # ---------------------------------------------------------------------------
@@ -502,7 +624,7 @@ class TestLagLifecycleRegressions:
 
         assert cmds == []
 
-    def test_replaced_explicit_lacp_mode_null_removes_lacp_mode(self):
+    def test_replaced_none_lacp_mode_is_omitted_not_an_implicit_reset(self):
         current = {
             "eth-trunk 1": {"mode": "dynamic", "lacp_mode": "active"}
         }
@@ -512,7 +634,7 @@ class TestLagLifecycleRegressions:
 
         cmds = lag_build_lifecycle_commands(config, "replaced", current)
 
-        assert cmds == ["interface eth-trunk 1", "no lacp mode"]
+        assert cmds == []
 
     def test_new_lag_after_state_includes_name(self):
         config = [

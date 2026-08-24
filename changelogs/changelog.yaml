@@ -1,5 +1,12 @@
 ancestor: null
 releases:
+  0.2.1:
+    changes:
+      release_summary: Harden resource reconciliation, mutation safety, and validation gates.
+      major_changes:
+        - Resource modules now use sealed plans and preserve unlisted resources for replaced operations.
+        - Omitted optional values are no-ops; unsupported reset, MTU, IPv6 route mutation, and unproven ACL syntax fail closed.
+        - The collection validates Python 3.12-3.14 with ansible-core 2.20-2.21 before publication.
   0.2.0:
     changes:
       release_summary: Mature XikeOS collection platform capabilities.

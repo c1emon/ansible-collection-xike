@@ -1,2 +1,5 @@
 exclude_paths:
   - playbooks/inventory.yml
+skip_list:
+  # ansible-lint 26.4.0 predates the supported ansible-core 2.20/2.21 series.
+  - meta-runtime[unsupported-version]

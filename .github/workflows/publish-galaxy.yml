@@ -5,8 +5,12 @@ on:
     types: [published]
 
 jobs:
+  validate:
+    uses: ./.github/workflows/validate.yml
+
   publish:
     name: Build and publish collection
+    needs: validate
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -47,13 +51,15 @@ jobs:
           echo "galaxy_version=$galaxy_version" >> "$GITHUB_ENV"
 
       - name: Install Ansible collection dependencies
-        run: uv run ansible-galaxy collection install ansible.netcommon -p .test_path
+        run: .venv/bin/ansible-galaxy collection install 'ansible.netcommon:>=5.0.0' -p .ansible/collections
 
       - name: Run unit tests
-        run: uv run pytest tests/unit
+        env:
+          ANSIBLE_COLLECTIONS_PATH: ${{ github.workspace }}/.ansible/collections
+        run: .venv/bin/python -m pytest tests/unit
 
       - name: Build collection
-        run: uv run ansible-galaxy collection build --force
+        run: .venv/bin/ansible-galaxy collection build --force
 
       - name: Verify built tarball matches galaxy.yml version
         run: |
@@ -67,4 +73,4 @@ jobs:
       - name: Publish collection to Galaxy
         run: |
           tarball="c1emon-xikeos-${galaxy_version}.tar.gz"
-          uv run ansible-galaxy collection publish "$tarball" --api-key "${{ secrets.ANSIBLE_GALAXY_API_KEY }}"
+          .venv/bin/ansible-galaxy collection publish "$tarball" --api-key "${{ secrets.ANSIBLE_GALAXY_API_KEY }}"

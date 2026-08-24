@@ -1,12 +1,12 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
 """Xike OS OSPFv2 resource module."""
 
 from __future__ import absolute_import, division, print_function
-__metaclass__ = type
 
-from typing import Any, Mapping, Optional, Sequence
+__metaclass__ = type
 
 DOCUMENTATION = """
 module: xikeos_ospf_v2
@@ -94,7 +94,7 @@ options:
     type: str
     default: merged
     choices: ['merged', 'replaced', 'rendered']
-author: clemon
+author: "clemon (@c1emon)"
 """
 
 EXAMPLES = """
@@ -184,26 +184,31 @@ rendered:
   type: list
 """
 
+from typing import Any, Mapping, Optional, Sequence
+
 from ansible.module_utils.basic import AnsibleModule
-from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.ospfv2 import Ospfv2Facts
+from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.ospfv2 import (
+    Ospfv2Facts,
+)
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import (
     exit_rendered_or_fail,
     gather_with_error_boundary,
 )
+
 
 def _normalize_config(config: Optional[Mapping[str, Any]]) -> dict[str, Any]:
     """Normalize config and canonicalize OSPF network area values."""
     if config is None:
         return {}
     normalized = dict(config)
-    if 'networks' in normalized and normalized['networks']:
-        normalized['networks'] = [
+    if "networks" in normalized and normalized["networks"]:
+        normalized["networks"] = [
             {
-                'network': n['network'],
-                'wildcard': n['wildcard'],
-                'area': str(n['area']),
+                "network": n["network"],
+                "wildcard": n["wildcard"],
+                "area": str(n["area"]),
             }
-            for n in normalized['networks']
+            for n in normalized["networks"]
         ]
     return normalized
 
@@ -212,7 +217,7 @@ def _get_existing_process(
     existing_facts: Mapping[str, Any], process_id: Any
 ) -> dict[str, Any]:
     """Return the stored facts for a single OSPF process if present."""
-    processes = existing_facts.get('processes', {})
+    processes = existing_facts.get("processes", {})
     proc = processes.get(process_id)
     if proc is None:
         return {}
@@ -231,7 +236,7 @@ def build_commands(
     Returns:
         list: CLI commands to apply
     """
-    process_id = config.get('process_id')
+    process_id = config.get("process_id")
     if process_id is None:
         return []
 
@@ -239,95 +244,107 @@ def build_commands(
     existing = _get_existing_process(existing_config, process_id)
 
     # --- Router ospf entry command ---
-    commands.append('router ospf {0}'.format(process_id))
+    commands.append("router ospf {0}".format(process_id))
 
     # --- Router ID ---
-    desired_rid = config.get('router_id')
-    existing_rid = existing.get('router_id')
+    desired_rid = config.get("router_id")
+    existing_rid = existing.get("router_id")
     if desired_rid and desired_rid != existing_rid:
-        commands.append('ospf router-id {0}'.format(desired_rid))
+        commands.append("ospf router-id {0}".format(desired_rid))
 
     # --- Networks ---
-    desired_networks = config.get('networks') or []
-    existing_networks = existing.get('networks') or []
-    desired_net_set = {(n['network'], n['wildcard'], str(n['area'])) for n in desired_networks}
-    existing_net_set = {(n['network'], n['wildcard'], str(n['area'])) for n in existing_networks}
+    desired_networks = config.get("networks") or []
+    existing_networks = existing.get("networks") or []
+    desired_net_set = {
+        (n["network"], n["wildcard"], str(n["area"])) for n in desired_networks
+    }
+    existing_net_set = {
+        (n["network"], n["wildcard"], str(n["area"])) for n in existing_networks
+    }
 
     for net in desired_net_set - existing_net_set:
-        commands.append('network {0} {1} area {2}'.format(*net))
+        commands.append("network {0} {1} area {2}".format(*net))
 
     for net in existing_net_set - desired_net_set:
-        commands.append('no network {0} {1} area {2}'.format(*net))
+        commands.append("no network {0} {1} area {2}".format(*net))
 
     # --- Redistribute ---
-    desired_redist = config.get('redistribute') or []
-    existing_redist = existing.get('redistribute') or []
+    desired_redist = config.get("redistribute") or []
+    existing_redist = existing.get("redistribute") or []
     desired_redist_set = set()
     for r in desired_redist:
-        key = (r['protocol'], r.get('metric'), r.get('route_map'))
+        key = (r["protocol"], r.get("metric"), r.get("route_map"))
         desired_redist_set.add(key)
     existing_redist_set = set()
     for r in existing_redist:
-        key = (r['protocol'], r.get('metric'), r.get('route_map'))
+        key = (r["protocol"], r.get("metric"), r.get("route_map"))
         existing_redist_set.add(key)
 
     for r_key in desired_redist_set - existing_redist_set:
-        cmd = 'redistribute {0}'.format(r_key[0])
+        cmd = "redistribute {0}".format(r_key[0])
         if r_key[1] is not None:
-            cmd += ' metric {0}'.format(r_key[1])
+            cmd += " metric {0}".format(r_key[1])
         if r_key[2] is not None:
-            cmd += ' route-map {0}'.format(r_key[2])
+            cmd += " route-map {0}".format(r_key[2])
         commands.append(cmd)
 
     for r_key in existing_redist_set - desired_redist_set:
-        cmd = 'no redistribute {0}'.format(r_key[0])
+        cmd = "no redistribute {0}".format(r_key[0])
         commands.append(cmd)
 
     # --- Default information originate ---
-    want_default = config.get('default_info_originate', False)
+    want_default = config.get("default_info_originate", False)
 
     # Build desired default-information command string
     desired_default_cmd = None
     if want_default:
-        desired_default_cmd = 'default-information originate'
-        if config.get('default_info_originate_always', False):
-            desired_default_cmd += ' always'
-        if config.get('default_info_originate_metric') is not None:
-            desired_default_cmd += ' metric {0}'.format(config['default_info_originate_metric'])
-        if config.get('default_info_originate_metric_type') is not None:
-            desired_default_cmd += ' metric-type {0}'.format(config['default_info_originate_metric_type'])
+        desired_default_cmd = "default-information originate"
+        if config.get("default_info_originate_always", False):
+            desired_default_cmd += " always"
+        if config.get("default_info_originate_metric") is not None:
+            desired_default_cmd += " metric {0}".format(
+                config["default_info_originate_metric"]
+            )
+        if config.get("default_info_originate_metric_type") is not None:
+            desired_default_cmd += " metric-type {0}".format(
+                config["default_info_originate_metric_type"]
+            )
 
     # Build existing default-information command string
     existing_default_cmd = None
-    if existing.get('default_info_originate', False):
-        existing_default_cmd = 'default-information originate'
-        if existing.get('default_info_originate_always', False):
-            existing_default_cmd += ' always'
-        if existing.get('default_info_originate_metric') is not None:
-            existing_default_cmd += ' metric {0}'.format(existing['default_info_originate_metric'])
-        if existing.get('default_info_originate_metric_type') is not None:
-            existing_default_cmd += ' metric-type {0}'.format(existing['default_info_originate_metric_type'])
+    if existing.get("default_info_originate", False):
+        existing_default_cmd = "default-information originate"
+        if existing.get("default_info_originate_always", False):
+            existing_default_cmd += " always"
+        if existing.get("default_info_originate_metric") is not None:
+            existing_default_cmd += " metric {0}".format(
+                existing["default_info_originate_metric"]
+            )
+        if existing.get("default_info_originate_metric_type") is not None:
+            existing_default_cmd += " metric-type {0}".format(
+                existing["default_info_originate_metric_type"]
+            )
 
     if desired_default_cmd and desired_default_cmd != existing_default_cmd:
         commands.append(desired_default_cmd)
     elif existing_default_cmd and not desired_default_cmd:
-        commands.append('no default-information originate')
+        commands.append("no default-information originate")
 
     # --- Passive interfaces ---
-    desired_passive = set(config.get('passive_interfaces') or [])
-    existing_passive = set(existing.get('passive_interfaces') or [])
+    desired_passive = set(config.get("passive_interfaces") or [])
+    existing_passive = set(existing.get("passive_interfaces") or [])
 
     for iface in desired_passive - existing_passive:
-        if iface == 'default':
-            commands.append('passive-interface default')
+        if iface == "default":
+            commands.append("passive-interface default")
         else:
-            commands.append('passive-interface {0}'.format(iface))
+            commands.append("passive-interface {0}".format(iface))
 
     for iface in existing_passive - desired_passive:
-        if iface == 'default':
-            commands.append('no passive-interface default')
+        if iface == "default":
+            commands.append("no passive-interface default")
         else:
-            commands.append('no passive-interface {0}'.format(iface))
+            commands.append("no passive-interface {0}".format(iface))
 
     # Remove the 'router ospf <id>' command if no actual changes
     if len(commands) == 1:
@@ -342,7 +359,7 @@ def build_delete_commands(
     existing_config: Mapping[str, Any],
 ) -> list[str]:
     """Build CLI commands that remove an OSPF process and its settings."""
-    process_id = config.get('process_id')
+    process_id = config.get("process_id")
     if process_id is None:
         return []
 
@@ -351,35 +368,39 @@ def build_delete_commands(
         return []
 
     commands = []
-    commands.append('router ospf {0}'.format(process_id))
+    commands.append("router ospf {0}".format(process_id))
 
     # Remove all existing networks
-    for net in existing.get('networks', []):
-        commands.append('no network {0} {1} area {2}'.format(
-            net['network'], net['wildcard'], str(net['area']),
-        ))
+    for net in existing.get("networks", []):
+        commands.append(
+            "no network {0} {1} area {2}".format(
+                net["network"],
+                net["wildcard"],
+                str(net["area"]),
+            )
+        )
 
     # Remove redistribute
-    for r in existing.get('redistribute', []):
-        commands.append('no redistribute {0}'.format(r['protocol']))
+    for r in existing.get("redistribute", []):
+        commands.append("no redistribute {0}".format(r["protocol"]))
 
     # Remove default-information originate
-    if existing.get('default_info_originate', False):
-        commands.append('no default-information originate')
+    if existing.get("default_info_originate", False):
+        commands.append("no default-information originate")
 
     # Remove passive interfaces
-    for iface in existing.get('passive_interfaces', []):
-        if iface == 'default':
-            commands.append('no passive-interface default')
+    for iface in existing.get("passive_interfaces", []):
+        if iface == "default":
+            commands.append("no passive-interface default")
         else:
-            commands.append('no passive-interface {0}'.format(iface))
+            commands.append("no passive-interface {0}".format(iface))
 
     # Remove router-id
-    if existing.get('router_id'):
-        commands.append('no ospf router-id')
+    if existing.get("router_id"):
+        commands.append("no ospf router-id")
 
     # Exit OSPF mode
-    commands.append('exit')
+    commands.append("exit")
 
     return commands
 
@@ -389,81 +410,81 @@ def main() -> None:
     module = AnsibleModule(
         argument_spec=dict(
             config=dict(
-                type='dict',
+                type="dict",
                 options=dict(
-                    process_id=dict(type='int', required=True),
-                    router_id=dict(type='str'),
+                    process_id=dict(type="int", required=True),
+                    router_id=dict(type="str"),
                     networks=dict(
-                        type='list',
-                        elements='dict',
+                        type="list",
+                        elements="dict",
                         options=dict(
-                            network=dict(type='str', required=True),
-                            wildcard=dict(type='str', required=True),
-                            area=dict(type='str', required=True),
+                            network=dict(type="str", required=True),
+                            wildcard=dict(type="str", required=True),
+                            area=dict(type="str", required=True),
                         ),
                     ),
                     redistribute=dict(
-                        type='list',
-                        elements='dict',
+                        type="list",
+                        elements="dict",
                         options=dict(
                             protocol=dict(
-                                type='str',
+                                type="str",
                                 required=True,
-                                choices=['static', 'connected', 'bgp'],
+                                choices=["static", "connected", "bgp"],
                             ),
-                            metric=dict(type='int'),
-                            route_map=dict(type='str'),
+                            metric=dict(type="int"),
+                            route_map=dict(type="str"),
                         ),
                     ),
                     default_info_originate=dict(
-                        type='bool',
+                        type="bool",
                         default=False,
                     ),
                     default_info_originate_always=dict(
-                        type='bool',
+                        type="bool",
                         default=False,
                     ),
-                    default_info_originate_metric=dict(type='int'),
+                    default_info_originate_metric=dict(type="int"),
                     default_info_originate_metric_type=dict(
-                        type='int',
+                        type="int",
                         choices=[1, 2],
                     ),
                     passive_interfaces=dict(
-                        type='list',
-                        elements='str',
+                        type="list",
+                        elements="str",
                     ),
                 ),
             ),
             state=dict(
-                type='str',
-                default='merged',
-                choices=['merged', 'replaced', 'rendered'],
+                type="str",
+                default="merged",
+                choices=["merged", "replaced", "rendered"],
             ),
         ),
         supports_check_mode=True,
     )
 
-    config = module.params.get('config')
-    state = module.params.get('state', 'merged')
+    config = module.params.get("config")
+    state = module.params.get("state", "merged")
 
     # Normalize area IDs
     if config:
         config = _normalize_config(config)
 
-    if state == 'rendered':
+    if state == "rendered":
         exit_rendered_or_fail(
             module,
-            'xikeos_ospf_v2',
+            "xikeos_ospf_v2",
             config,
             state,
-            lambda cfg, _state: build_commands(cfg, {'processes': {}}),
-            'merged',
+            lambda cfg, _state: build_commands(cfg, {"processes": {}}),
+            "merged",
         )
     elif config is not None:
         module.fail_json(
             msg=(
-                'xikeos_ospf_v2 supports state=rendered only until lifecycle-safe gather, diff, '
-                'and load_config apply support is implemented; state={0} is unsupported'
+                "xikeos_ospf_v2 supports state=rendered only until lifecycle-safe gather, diff, "
+                "and load_config apply support is implemented; state={0} is unsupported"
             ).format(state)
         )
         return
@@ -472,72 +493,75 @@ def main() -> None:
     existing_config = gather_with_error_boundary(
         module,
         lambda: Ospfv2Facts(module).facts,
-        'failed to gather OSPFv2 facts',
-        'ospf_v2',
+        "failed to gather OSPFv2 facts",
+        "ospf_v2",
         {},
     )
 
     result = {
-        'changed': False,
-        'commands': [],
-        'before': existing_config,
+        "changed": False,
+        "commands": [],
+        "before": existing_config,
     }
 
     all_commands = []
 
     if config is not None:
-        if state == 'merged':
+        if state == "merged":
             commands = build_commands(config, existing_config)
             all_commands.extend(commands)
-        elif state == 'replaced':
+        elif state == "replaced":
             # For replaced, build commands that achieve the desired state
             # This replaces the entire configuration for the given process
             commands = build_commands(config, existing_config)
             all_commands.extend(commands)
 
             # Additionally remove networks/ redistribution not in desired config
-            process_id = config.get('process_id')
+            process_id = config.get("process_id")
             existing = _get_existing_process(existing_config, process_id)
             if existing:
-                desired_networks = config.get('networks') or []
-                desired_net_set = {(n['network'], n['wildcard'], str(n['area'])) for n in desired_networks}
+                desired_networks = config.get("networks") or []
+                desired_net_set = {
+                    (n["network"], n["wildcard"], str(n["area"]))
+                    for n in desired_networks
+                }
                 existing_net_set = {
-                    (n['network'], n['wildcard'], str(n['area']))
-                    for n in existing.get('networks', [])
+                    (n["network"], n["wildcard"], str(n["area"]))
+                    for n in existing.get("networks", [])
                 }
                 for net in existing_net_set - desired_net_set:
-                    all_commands.append('router ospf {0}'.format(process_id))
-                    all_commands.append('no network {0} {1} area {2}'.format(*net))
+                    all_commands.append("router ospf {0}".format(process_id))
+                    all_commands.append("no network {0} {1} area {2}".format(*net))
 
-                desired_redist = config.get('redistribute') or []
-                desired_redist_set = {(r['protocol'],) for r in desired_redist}
-                existing_redist = existing.get('redistribute', [])
+                desired_redist = config.get("redistribute") or []
+                desired_redist_set = {(r["protocol"],) for r in desired_redist}
+                existing_redist = existing.get("redistribute", [])
                 for r in existing_redist:
-                    if (r['protocol'],) not in desired_redist_set:
-                        all_commands.append('router ospf {0}'.format(process_id))
-                        all_commands.append('no redistribute {0}'.format(r['protocol']))
+                    if (r["protocol"],) not in desired_redist_set:
+                        all_commands.append("router ospf {0}".format(process_id))
+                        all_commands.append("no redistribute {0}".format(r["protocol"]))
 
     # De-duplicate while preserving order (remove consecutive 'router ospf X' if followed by another)
     deduped = _deduplicate_commands(all_commands)
 
-    result['commands'] = deduped
+    result["commands"] = deduped
 
     if module.check_mode:
         module.exit_json(**result)
 
-    result['changed'] = bool(deduped)
+    result["changed"] = bool(deduped)
 
     # Refresh facts for 'after'
     if deduped:
-        result['after'] = gather_with_error_boundary(
+        result["after"] = gather_with_error_boundary(
             module,
             lambda: Ospfv2Facts(module).facts,
-            'failed to gather OSPFv2 facts after apply',
-            'ospf_v2',
+            "failed to gather OSPFv2 facts after apply",
+            "ospf_v2",
             existing_config,
         )
     else:
-        result['after'] = existing_config
+        result["after"] = existing_config
 
     module.exit_json(**result)
 
@@ -549,11 +573,15 @@ def _deduplicate_commands(commands: Sequence[str]) -> list[str]:
 
     deduped = []
     for cmd in commands:
-        if deduped and cmd.startswith('router ospf ') and deduped[-1].startswith('router ospf '):
+        if (
+            deduped
+            and cmd.startswith("router ospf ")
+            and deduped[-1].startswith("router ospf ")
+        ):
             continue
         deduped.append(cmd)
     return deduped
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

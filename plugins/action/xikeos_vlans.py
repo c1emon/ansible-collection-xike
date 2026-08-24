@@ -1,4 +1,3 @@
-#!/usr/bin/python
 # -*- coding: utf-8 -*-
 
 """Action plugin for xikeos_vlans controller-side parser templates."""

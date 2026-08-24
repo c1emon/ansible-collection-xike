@@ -1,12 +1,11 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
 """Xike OS ERPS (G.8032) resource module."""
 
 from __future__ import absolute_import, division, print_function
 __metaclass__ = type
-
-from typing import Any, Mapping, Sequence
 
 DOCUMENTATION = """
 module: xikeos_erps
@@ -81,7 +80,7 @@ options:
     type: str
     choices: ['present', 'absent', 'rendered']
     default: present
-author: clemon
+author: "clemon (@c1emon)"
 """
 
 EXAMPLES = """
@@ -139,6 +138,8 @@ rendered:
   returned: when I(state) is C(rendered)
   type: list
 """
+
+from typing import Any, Mapping, Sequence
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import exit_rendered_or_fail

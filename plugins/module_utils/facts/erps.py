@@ -1,14 +1,16 @@
-#!/usr/bin/python
 # -*- coding: utf-8 -*-
 
 """ERPS facts module for Xike OS."""
 
 from __future__ import absolute_import, division, print_function
+
 __metaclass__ = type
+# pylint: disable=unsupported-binary-operation
 
 from typing import Any
 
 import re
+
 
 def parse_erps_brief(output: str | None) -> dict[str, list[dict[str, Any]]]:
     """
@@ -54,13 +56,15 @@ def parse_erps_brief(output: str | None) -> dict[str, list[dict[str, Any]]]:
             port1 = match.group(4)
             work_mode = match.group(5).lower().replace("-", "-")
 
-            facts["instances"].append({
-                "instance_id": instance_id,
-                "control_vlan": control_vlan,
-                "port0": port0,
-                "port1": port1,
-                "work_mode": work_mode,
-            })
+            facts["instances"].append(
+                {
+                    "instance_id": instance_id,
+                    "control_vlan": control_vlan,
+                    "port0": port0,
+                    "port1": port1,
+                    "work_mode": work_mode,
+                }
+            )
 
     return facts
 
@@ -184,14 +188,16 @@ def parse_erps_statistics(output: str | None) -> dict[str, list[dict[str, Any]]]
             stripped,
         )
         if match:
-            facts["instances"].append({
-                "instance_id": int(match.group(1)),
-                "rx_config": int(match.group(2)),
-                "tx_config": int(match.group(3)),
-                "rx_flush": int(match.group(4)),
-                "tx_flush": int(match.group(5)),
-                "events": int(match.group(6)),
-            })
+            facts["instances"].append(
+                {
+                    "instance_id": int(match.group(1)),
+                    "rx_config": int(match.group(2)),
+                    "tx_config": int(match.group(3)),
+                    "rx_flush": int(match.group(4)),
+                    "tx_flush": int(match.group(5)),
+                    "events": int(match.group(6)),
+                }
+            )
 
     return facts
 
@@ -223,9 +229,7 @@ def get_facts(facts_module: Any, connection: Any) -> dict[str, dict[str, Any]]:
         instance_id = inst.get("instance_id")
         if instance_id is not None:
             try:
-                stdout = connection.get(
-                    command=f"show erps instance {instance_id}"
-                )
+                stdout = connection.get(command=f"show erps instance {instance_id}")
                 detailed = parse_erps_instance(stdout, instance_id)
                 detailed_instances.append(detailed)
             except Exception:

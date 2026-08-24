@@ -1,12 +1,12 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
 """Xike OS VLANs resource module."""
 
 from __future__ import absolute_import, division, print_function
-__metaclass__ = type
 
-from typing import Any, Optional
+__metaclass__ = type
 
 DOCUMENTATION = """
 module: xikeos_vlans
@@ -34,7 +34,9 @@ options:
       state:
         description:
           - VLAN state (active/suspend).
-          - C(suspend) is accepted in the configuration model, but mutating states C(merged) and C(replaced) do not render suspended VLAN configuration items and will fail if one is requested.
+          - C(suspend) is accepted in the configuration model, but mutating
+            states C(merged) and C(replaced) do not render suspended VLAN
+            configuration items and will fail if one is requested.
         type: str
         choices: ['active', 'suspend']
         default: active
@@ -49,7 +51,12 @@ options:
     type: str
     choices: ['merged', 'replaced', 'deleted', 'gathered', 'rendered']
     default: merged
-author: clemon
+  _textfsm_templates:
+    description:
+      - Internal action-plugin injection for bundled parser templates.
+      - Do not set this option in playbooks.
+    type: dict
+author: "clemon (@c1emon)"
 """
 
 EXAMPLES = """
@@ -117,11 +124,39 @@ rendered:
   type: list
 """
 
+from typing import Any, Optional
+
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.common.text.converters import to_text
-from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.vlans import parse_vlan
-from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config, run_commands
-from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import gather_with_error_boundary, run_resource_module_lifecycle
+from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.vlans import (
+    parse_vlan,
+)
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.xikeos import (
+    load_config,
+    run_commands,
+)
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import (
+    gather_with_error_boundary,
+    run_resource_module_lifecycle,
+)
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.reconcile import (
+    FieldPolicy,
+    Operation,
+    ResourcePlan,
+    ResourcePolicy,
+    ReconciliationInputError,
+    plan_operations,
+    seal_resource_plan,
+)
+
+
+VLAN_POLICY = ResourcePolicy(
+    identity=("vlan_id",),
+    fields={
+        "present": FieldPolicy(kind="scalar", removal_supported=False),
+        "name": FieldPolicy(kind="scalar", removal_supported=False),
+    },
+)
 
 
 def vlan_id_range(vlan_ids: list[int]) -> str:
@@ -170,61 +205,112 @@ def _normalize_vlan(vlan: dict[str, Any]) -> dict[str, Any]:
 
 def _index_vlans(vlans: list[dict[str, Any]]) -> dict[int, dict[str, Any]]:
     """Index normalized VLAN records by VLAN ID."""
-    return {item["vlan_id"]: _normalize_vlan(item) for item in vlans}
+    return {
+        item["vlan_id"]: {**_normalize_vlan(item), "present": True} for item in vlans
+    }
 
 
-def get_commands(config: list[dict[str, Any]], state: str, current: Optional[list[dict[str, Any]]] = None) -> list[str]:
-    """Generate minimal CLI commands from VLAN configuration and current state."""
-    commands = []
-    current_by_id = _index_vlans(current or [])
-
-    if state == "merged":
-        for vlan in config:
-            requested_name = vlan.get("name")
-            vlan = _normalize_vlan(vlan)
-            vlan_id = vlan["vlan_id"]
-            name = requested_name or ""
-            existing = current_by_id.get(vlan_id)
-            name_matches = True if not name else existing and existing.get("name", "") == name
-            state_matches = existing and existing.get("state", "active") == vlan.get("state", "active")
-            if existing and name_matches and state_matches:
-                continue
-
-            commands.append(f"vlan {vlan_id}")
-            if name:
-                commands.append(f"description {name}")
-            commands.append("exit")
-
-    elif state == "replaced":
-        desired_ids = {int(vlan["vlan_id"]) for vlan in config}
-        for vlan_id in sorted(set(current_by_id) - desired_ids):
-            if vlan_id != 1:
-                commands.append(f"no vlan {vlan_id}")
-        for vlan in config:
-            requested_name = vlan.get("name")
-            vlan = _normalize_vlan(vlan)
-            vlan_id = vlan["vlan_id"]
-            name = requested_name or ""
-            existing = current_by_id.get(vlan_id)
-            name_matches = True if not name else existing and existing.get("name", "") == name
-            state_matches = existing and existing.get("state", "active") == vlan.get("state", "active")
-            if existing and name_matches and state_matches:
-                continue
-            commands.append(f"vlan {vlan_id}")
-            if name:
-                commands.append(f"description {name}")
-            commands.append("exit")
-
-    elif state == "deleted":
-        for vlan in config:
-            vlan_id = vlan["vlan_id"]
-            if vlan_id in current_by_id or not current:
-                commands.append(f"no vlan {vlan_id}")
-
-    return commands
+def _normalize_desired_vlans(
+    config: list[dict[str, Any]], state: str
+) -> dict[int, dict[str, Any]]:
+    """Preserve omitted names while expressing VLAN existence explicitly."""
+    desired: dict[int, dict[str, Any]] = {}
+    for vlan in config:
+        vlan_id = int(vlan["vlan_id"])
+        if vlan_id in desired:
+            raise ReconciliationInputError(
+                "duplicate VLAN identity: {0}".format(vlan_id)
+            )
+        if state == "deleted":
+            desired[vlan_id] = {"vlan_id": vlan_id, "present": False}
+            continue
+        normalized = {"vlan_id": vlan_id, "present": True}
+        if vlan.get("name") is not None:
+            normalized["name"] = str(vlan["name"])
+        desired[vlan_id] = normalized
+    return desired
 
 
-def validate_vlan_request(module: Any, config: list[dict[str, Any]], state: str) -> None:
+def _render_vlan_operation(operation: Operation) -> list[str]:
+    """Render one evidence-admitted VLAN semantic operation."""
+    vlan_id = int(dict(operation.resource)["vlan_id"])
+    if operation.field == "present":
+        return (
+            ["vlan {0}".format(vlan_id), "exit"]
+            if operation.value
+            else ["no vlan {0}".format(vlan_id)]
+        )
+    if operation.field == "name":
+        return [
+            "vlan {0}".format(vlan_id),
+            "description {0}".format(operation.value),
+            "exit",
+        ]
+    raise ReconciliationInputError("unrendered VLAN field: {0}".format(operation.field))
+
+
+def _public_vlan_state(state_map: dict[int, dict[str, Any]]) -> list[dict[str, Any]]:
+    """Remove planner-only presence state from lifecycle results."""
+    result: list[dict[str, Any]] = []
+    for vlan_id in sorted(state_map):
+        vlan = dict(state_map[vlan_id])
+        if not vlan.pop("present", True):
+            continue
+        vlan.setdefault("vlan_id", vlan_id)
+        result.append(vlan)
+    return result
+
+
+def _compact_vlan_contexts(commands: tuple[str, ...]) -> tuple[str, ...]:
+    """Coalesce adjacent, fully acknowledged operations on one VLAN context."""
+    compacted: list[str] = []
+    index = 0
+    while index < len(commands):
+        if (
+            index + 2 < len(commands)
+            and commands[index].startswith("vlan ")
+            and commands[index + 1] == "exit"
+            and commands[index + 2] == commands[index]
+        ):
+            compacted.append(commands[index])
+            index += 3
+            continue
+        compacted.append(commands[index])
+        index += 1
+    return tuple(compacted)
+
+
+def build_lifecycle_plan(
+    config: list[dict[str, Any]], state: str, before: list[dict[str, Any]]
+) -> ResourcePlan:
+    """Build one sealed VLAN transition from canonical facts and desired input."""
+    current = _index_vlans(before)
+    desired = _normalize_desired_vlans(config, state)
+    planning_state = "replaced" if state == "deleted" else state
+    operations = plan_operations(current, desired, planning_state, VLAN_POLICY)
+    plan = seal_resource_plan(
+        current, operations, VLAN_POLICY, _render_vlan_operation, state
+    )
+    return ResourcePlan(
+        plan.operations,
+        _compact_vlan_contexts(plan.commands),
+        _public_vlan_state(plan.after),
+        plan.changed,
+    )
+
+
+def get_commands(
+    config: list[dict[str, Any]],
+    state: str,
+    current: Optional[list[dict[str, Any]]] = None,
+) -> list[str]:
+    """Compatibility wrapper around the sealed VLAN plan."""
+    return list(build_lifecycle_plan(config, state, current or []).commands)
+
+
+def validate_vlan_request(
+    module: Any, config: list[dict[str, Any]], state: str
+) -> None:
     """Fail fast for VLAN lifecycle edge cases that are not safe to mutate."""
     if state == "gathered":
         return
@@ -247,12 +333,15 @@ def validate_vlan_request(module: Any, config: list[dict[str, Any]], state: str)
 
 def gather_vlans(module: Any) -> list[dict[str, Any]]:
     """Collect VLAN state from the device and normalize parsed records."""
+
     def _gather() -> list[dict[str, Any]]:
         stdout = run_commands(module, ["show vlan"], check_rc=True)
         output = to_text(stdout[0] if stdout else "", errors="surrogate_or_strict")
         return [
             _normalize_vlan(vlan)
-            for vlan in parse_vlan(output, textfsm_templates=module.params.get("_textfsm_templates"))
+            for vlan in parse_vlan(
+                output, textfsm_templates=module.params.get("_textfsm_templates")
+            )
         ]
 
     return gather_with_error_boundary(
@@ -265,22 +354,11 @@ def gather_vlans(module: Any) -> list[dict[str, Any]]:
     )
 
 
-def build_after_state(before: list[dict[str, Any]], desired: list[dict[str, Any]], state: str) -> list[dict[str, Any]]:
-    """Compute the expected VLAN state after a lifecycle operation."""
-    after = _index_vlans(before)
-    if state in ("merged", "replaced"):
-        if state == "replaced":
-            desired_ids = {int(vlan["vlan_id"]) for vlan in desired}
-            after = {vlan_id: vlan for vlan_id, vlan in after.items() if vlan_id in desired_ids or vlan_id == 1}
-        for vlan in desired:
-            normalized = _normalize_vlan(vlan)
-            if not vlan.get("name") and normalized["vlan_id"] in after:
-                normalized["name"] = after[normalized["vlan_id"]].get("name", "")
-            after[normalized["vlan_id"]] = normalized
-    elif state == "deleted":
-        for vlan in desired:
-            after.pop(int(vlan["vlan_id"]), None)
-    return [after[vlan_id] for vlan_id in sorted(after)]
+def build_after_state(
+    before: list[dict[str, Any]], desired: list[dict[str, Any]], state: str
+) -> list[dict[str, Any]]:
+    """Compatibility wrapper around the sealed VLAN plan."""
+    return list(build_lifecycle_plan(desired, state, before).after)
 
 
 def main() -> None:
@@ -338,6 +416,7 @@ def main() -> None:
         gathered_states=("gathered",),
         rendered_states=("rendered",),
         apply_config=load_config,
+        build_plan=build_lifecycle_plan,
     )
 
 

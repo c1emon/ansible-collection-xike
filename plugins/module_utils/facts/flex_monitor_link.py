@@ -1,11 +1,14 @@
 """Flex-Link and Monitor-Link facts module for Xike OS."""
 
 from __future__ import absolute_import, division, print_function
+
 __metaclass__ = type
+# pylint: disable=unsupported-binary-operation
 
 from typing import Any
 
 import re
+
 
 def _parse_port_spec(text: str | None) -> dict[str, str] | None:
     """Parse a port spec string like 'eth 0/0/1' or 'eth-trunk 1' into a dict."""

@@ -43,7 +43,7 @@ Resource-module state behavior is explicit:
 
 Configure Ethernet interfaces on Xike switches.
 
-**Purpose**: Manage physical interface properties including speed, duplex, description, MTU, and admin state.
+**Purpose**: Manage evidence-admitted physical interface properties: speed, duplex, description, and admin state.
 
 **Parameters**:
 
@@ -54,8 +54,7 @@ Configure Ethernet interfaces on Xike switches.
 | `config[].description` | str | - | No | - | Interface description string |
 | `config[].speed` | str | - | No | `10`, `100`, `1000`, `10000`, `auto` | Interface speed |
 | `config[].duplex` | str | - | No | `auto`, `full`, `half` | Interface duplex mode |
-| `config[].enabled` | bool | `true` | No | - | Admin state (`false` = shutdown) |
-| `config[].mtu` | int | - | No | - | MTU size |
+| `config[].enabled` | bool | - | No | - | Admin state (`false` = shutdown); omission is a no-op |
 | `state` | str | `merged` | No | `merged`, `replaced` | Desired state |
 
 **States**:
@@ -68,7 +67,6 @@ interface ethernet 0/0/1
 description Uplink to core
 speed 1000
 duplex full
-mtu 1500
 no shutdown
 ```
 
@@ -82,7 +80,6 @@ no shutdown
         speed: 1000
         duplex: full
         enabled: true
-        mtu: 1500
     state: merged
 ```
 

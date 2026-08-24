@@ -1,9 +1,11 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
 """Xike switch configuration module."""
 
 from __future__ import absolute_import, division, print_function
+
 __metaclass__ = type
 
 DOCUMENTATION = """
@@ -34,7 +36,7 @@ options:
       - Currently unsupported; setting this option to C(true) fails the module.
     type: bool
     default: false
-author: clemon
+author: "clemon (@c1emon)"
 """
 
 EXAMPLES = """
@@ -65,6 +67,7 @@ saved:
 response:
   description: Raw response returned by the configuration application helper.
   returned: when lines are provided
+  type: dict
 msg:
   description: Informational message returned when nothing needs to be configured.
   type: str
@@ -72,41 +75,61 @@ msg:
 """
 
 from ansible.module_utils.basic import AnsibleModule
-from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.errors import XikeOSError
-from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config, run_commands
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.errors import (
+    XikeOSError,
+)
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.xikeos import (
+    load_config,
+    run_commands,
+)
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.safety import (
+    redact_value,
+    validate_command_entries,
+)
 
 
-SAVE_COMMAND = 'write memory'
+SAVE_COMMAND = "write memory"
 
 
 def main() -> None:
     module = AnsibleModule(
         argument_spec=dict(
-            lines=dict(type='list', elements='str'),
-            save=dict(type='bool', default=False),
-            diff=dict(type='bool', default=False),
-            backup=dict(type='bool', default=False),
+            lines=dict(type="list", elements="str"),
+            save=dict(type="bool", default=False),
+            diff=dict(type="bool", default=False),
+            backup=dict(type="bool", default=False),
         ),
         supports_check_mode=True,
     )
 
-    lines = module.params.get('lines', [])
-    save = module.params.get('save', False)
-    diff = module.params.get('diff', False)
-    backup = module.params.get('backup', False)
+    try:
+        lines = validate_command_entries(module.params.get("lines", []) or [])
+    except ValueError as exc:
+        module.fail_json(
+            msg="invalid configuration input",
+            changed=False,
+            commands=[],
+            error=str(exc),
+        )
+        return
+    save = module.params.get("save", False)
+    diff = module.params.get("diff", False)
+    backup = module.params.get("backup", False)
 
     if diff:
-        module.fail_json(msg='diff is not supported by xikeos_config yet')
+        module.fail_json(msg="diff is not supported by xikeos_config yet")
     if backup:
-        module.fail_json(msg='backup is not supported by xikeos_config yet')
+        module.fail_json(msg="backup is not supported by xikeos_config yet")
 
     if not lines and not save:
-        module.exit_json(changed=False, commands=[], saved=False, msg='No lines to configure')
+        module.exit_json(
+            changed=False, commands=[], saved=False, msg="No lines to configure"
+        )
 
     result = {
-        'changed': bool(lines),
-        'commands': list(lines),
-        'saved': False,
+        "changed": bool(lines),
+        "commands": redact_value(list(lines)),
+        "saved": False,
     }
 
     if module.check_mode:
@@ -116,27 +139,63 @@ def main() -> None:
         try:
             response = load_config(module, lines)
         except XikeOSError as exc:
-            module.fail_json(msg='failed to apply configuration', changed=bool(lines), saved=False, commands=list(lines), error=str(exc), detail=getattr(exc, 'detail', None), context=getattr(exc, 'context', 'config'))
+            module.fail_json(
+                msg="failed to apply configuration",
+                changed=bool(lines),
+                saved=False,
+                commands=redact_value(list(lines)),
+                error=redact_value(str(exc)),
+                detail=redact_value(getattr(exc, "detail", None)),
+                context=getattr(exc, "context", "config"),
+            )
             return
         except Exception as exc:
-            module.fail_json(msg='failed to apply configuration', changed=bool(lines), saved=False, commands=list(lines), error=str(exc), context='config')
+            module.fail_json(
+                msg="failed to apply configuration",
+                changed=bool(lines),
+                saved=False,
+                commands=redact_value(list(lines)),
+                error=redact_value(str(exc)),
+                context="config",
+            )
             return
-        result['response'] = response.get('response', response) if isinstance(response, dict) else response
+        result["response"] = redact_value(
+            response.get("response", response)
+            if isinstance(response, dict)
+            else response
+        )
 
-    if save and result['changed']:
+    if save and result["changed"]:
         try:
             run_commands(module, [SAVE_COMMAND], check_rc=True)
         except XikeOSError as exc:
-            module.fail_json(msg='failed to save configuration after apply', changed=True, saved=False, commands=result['commands'] + [SAVE_COMMAND], applied=bool(lines), error=str(exc), detail=getattr(exc, 'detail', None), context=getattr(exc, 'context', 'config'))
+            module.fail_json(
+                msg="failed to save configuration after apply",
+                changed=True,
+                saved=False,
+                commands=result["commands"] + [SAVE_COMMAND],
+                applied=bool(lines),
+                error=redact_value(str(exc)),
+                detail=redact_value(getattr(exc, "detail", None)),
+                context=getattr(exc, "context", "config"),
+            )
             return
         except Exception as exc:
-            module.fail_json(msg='failed to save configuration after apply', changed=True, saved=False, commands=result['commands'] + [SAVE_COMMAND], applied=bool(lines), error=str(exc), context='config')
+            module.fail_json(
+                msg="failed to save configuration after apply",
+                changed=True,
+                saved=False,
+                commands=result["commands"] + [SAVE_COMMAND],
+                applied=bool(lines),
+                error=redact_value(str(exc)),
+                context="config",
+            )
             return
-        result['commands'].append(SAVE_COMMAND)
-        result['saved'] = True
+        result["commands"].append(SAVE_COMMAND)
+        result["saved"] = True
 
     module.exit_json(**result)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

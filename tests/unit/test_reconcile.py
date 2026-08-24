@@ -11,9 +11,10 @@ from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.recon
     Operation,
     ReconciliationInputError,
     ResourcePolicy,
-    UnsupportedRemovalError,
+    UnrenderedOperationError,
     apply_operations_to_state,
     plan_operations,
+    seal_resource_plan,
 )
 
 
@@ -36,7 +37,7 @@ def test_planner_is_deterministic_and_emits_operations():
     assert [operation.action for operation in ops1] == ["set_field", "add_item"]
 
 
-def test_scalar_field_set_and_unsupported_unset_failure():
+def test_scalar_field_set_and_none_requires_explicit_reset():
     policy = ResourcePolicy(
         identity=("name",),
         fields={"mode": FieldPolicy(kind="scalar", removal_supported=False)},
@@ -47,7 +48,7 @@ def test_scalar_field_set_and_unsupported_unset_failure():
     ops = plan_operations(current, desired, "replaced", policy)
     assert ops == [Operation("set_field", (("name", "eth-trunk 1"),), "mode", "dynamic")]
 
-    with pytest.raises(UnsupportedRemovalError):
+    with pytest.raises(ReconciliationInputError, match="omit None"):
         plan_operations(current, {"eth-trunk 1": {"mode": None}}, "replaced", policy)
 
 
@@ -141,3 +142,38 @@ def test_malformed_input_fails_fast():
 
     with pytest.raises(ReconciliationInputError):
         plan_operations({}, {"eth-trunk 1": {"members": "not-a-list"}}, "merged", policy)
+
+    with pytest.raises(ReconciliationInputError, match="unknown desired fields"):
+        plan_operations({}, {"eth-trunk 1": {"unknown": "value"}}, "merged", policy)
+
+    with pytest.raises(ReconciliationInputError, match="duplicate set item identity"):
+        plan_operations({}, {"eth-trunk 1": {"members": ["0/0/1", "0/0/1"]}}, "merged", policy)
+
+
+def test_sealed_plan_requires_each_operation_to_render_and_simulates_after_state():
+    policy = ResourcePolicy(
+        identity=("name",),
+        fields={"members": FieldPolicy(kind="set", identity=())},
+    )
+    current = {"eth-trunk 1": {"members": ["0/0/1"]}}
+    operations = plan_operations(
+        current,
+        {"eth-trunk 1": {"members": ["0/0/1", "0/0/2"]}},
+        "merged",
+        policy,
+    )
+
+    plan = seal_resource_plan(
+        current,
+        operations,
+        policy,
+        lambda operation: ["interface {0}".format(operation.resource[0][1]), "add {0}".format(operation.value)],
+        "merged",
+    )
+
+    assert plan.changed is True
+    assert plan.commands == ("interface eth-trunk 1", "add 0/0/2")
+    assert plan.after == {"eth-trunk 1": {"members": ["0/0/1", "0/0/2"]}}
+
+    with pytest.raises(UnrenderedOperationError, match="did not produce complete commands"):
+        seal_resource_plan(current, operations, policy, lambda operation: [], "merged")

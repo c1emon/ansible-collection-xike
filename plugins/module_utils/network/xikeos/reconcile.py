@@ -4,7 +4,7 @@ __metaclass__ = type
 
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 
 """Pure reconciliation helpers for normalized XikeOS resource state.
@@ -36,6 +36,10 @@ class ReconciliationInputError(ReconciliationError):
 
 class UnsupportedRemovalError(ReconciliationError):
     """Raised when a requested removal is not supported by policy."""
+
+
+class UnrenderedOperationError(ReconciliationError):
+    """Raised when a semantic operation cannot be rendered completely."""
 
 
 @dataclass
@@ -143,6 +147,22 @@ class Operation:
     value: Any = None
 
 
+@dataclass(frozen=True)
+class ResourcePlan:
+    """One immutable, fully rendered resource transition.
+
+    The pure reconciler produces ``operations`` without CLI knowledge. A module
+    renderer must acknowledge every operation before this object is created, so
+    lifecycle code cannot report a changed/after result for a transition that
+    has no command representation.
+    """
+
+    operations: tuple[Operation, ...]
+    commands: tuple[str, ...]
+    after: Any
+    changed: bool
+
+
 def resource_identity(resource: Mapping[str, Any], policy: ResourcePolicy) -> tuple[tuple[str, Any], ...]:
     """Build a canonical resource identity tuple from normalized resource data.
 
@@ -243,6 +263,13 @@ def _normalize_resource_map(resources: Any, policy: ResourcePolicy, label: str) 
     for key, resource in resources.items():
         if not isinstance(resource, Mapping):
             raise ReconciliationInputError("{0} resource must be a mapping".format(label))
+        if label == "desired":
+            known_fields = set(policy.identity) | set(policy.fields)
+            unknown_fields = sorted(set(resource) - known_fields)
+            if unknown_fields:
+                raise ReconciliationInputError(
+                    "unknown desired fields for resource {0}: {1}".format(key, ", ".join(unknown_fields))
+                )
         canonical_key = _resource_key_from_input(key, resource, policy)
         if canonical_key in normalized:
             raise ReconciliationInputError("duplicate resource identity: {0}".format(canonical_key))
@@ -270,8 +297,16 @@ def _normalize_set_items(
         )
 
     normalized: list[tuple[tuple[tuple[str, Any], ...], Any]] = []
+    seen: set[tuple[tuple[str, Any], ...]] = set()
     for item in values:
         identity = item_identity(item, policy)
+        if identity in seen:
+            raise ReconciliationInputError(
+                "duplicate set item identity for resource {0}, field {1}: {2}".format(
+                    resource_key, field_name, identity
+                )
+            )
+        seen.add(identity)
         normalized.append((identity, dict(item) if isinstance(item, Mapping) else item))
     return normalized
 
@@ -280,7 +315,7 @@ def _display_resource_key(identity: tuple[tuple[str, Any], ...]) -> Any:
     """Convert canonical identity back to the public state-map key shape."""
     if len(identity) == 1:
         return identity[0][1]
-    return tuple(value for _, value in identity)
+    return tuple(pair_value for _field_name, pair_value in identity)
 
 
 def plan_operations(
@@ -357,15 +392,10 @@ def plan_operations(
                     continue
                 desired_value = desired_resource[field_name]
                 if desired_value is None:
-                    if current_has and not field_policy.removal_supported:
-                        raise UnsupportedRemovalError(
-                            "removal is not supported for resource {0}, field {1}, state {2}".format(
-                                resource_key, field_name, state
-                            )
-                        )
-                    if current_has:
-                        operations.append(Operation("unset_field", resource_key, field_name, None))
-                    continue
+                    raise ReconciliationInputError(
+                        "canonical desired state must omit None for resource {0}, field {1}; "
+                        "use an explicit typed reset when supported".format(resource_key, field_name)
+                    )
 
                 if (not current_has) or current_resource.get(field_name) != desired_value:
                     operations.append(Operation("set_field", resource_key, field_name, deepcopy(desired_value)))
@@ -376,8 +406,8 @@ def plan_operations(
 
             desired_items = _normalize_set_items(desired_resource[field_name], field_policy, "desired", resource_key, field_name)
             current_items = _normalize_set_items(current_resource.get(field_name, []), field_policy, "current", resource_key, field_name)
-            desired_by_id = {identity: value for identity, value in desired_items}
-            current_by_id = {identity: value for identity, value in current_items}
+            desired_by_id = dict(desired_items)
+            current_by_id = dict(current_items)
 
             if state == "merged":
                 for item_identity_value in sorted(desired_by_id, key=_sort_token):
@@ -400,6 +430,39 @@ def plan_operations(
                     operations.append(Operation("add_item", resource_key, field_name, deepcopy(desired_by_id[item_identity_value])))
 
     return operations
+
+
+def seal_resource_plan(
+    current: Any,
+    operations: Sequence[Operation],
+    policy: ResourcePolicy,
+    render_operation: Callable[[Operation], Sequence[str]],
+    state: str,
+) -> ResourcePlan:
+    """Render every operation and return one immutable lifecycle plan.
+
+    ``render_operation`` receives exactly one semantic operation and must return
+    the complete command sequence needed for it, including any resource context.
+    An empty result is an explicit error rather than a silent operation drop.
+    """
+    rendered: list[str] = []
+    frozen_operations = tuple(operations)
+    for operation in frozen_operations:
+        commands = tuple(render_operation(operation))
+        if not commands or any(not isinstance(command, str) or not command.strip() for command in commands):
+            raise UnrenderedOperationError(
+                "renderer did not produce complete commands for operation: {0}".format(operation)
+            )
+        rendered.extend(commands)
+
+    after = apply_operations_to_state(current, frozen_operations, policy)
+    commands_tuple = tuple(rendered)
+    return ResourcePlan(
+        operations=frozen_operations,
+        commands=commands_tuple,
+        after=after,
+        changed=bool(commands_tuple) if state != "rendered" else False,
+    )
 
 
 def apply_operations_to_state(
@@ -435,7 +498,7 @@ def apply_operations_to_state(
         if operation.field not in policy.fields:
             raise ReconciliationInputError("unknown field in operation: {0}".format(operation.field))
         field_policy = policy.fields[operation.field]
-        resource_state = state_map.setdefault(operation.resource, {})
+        resource_state = state_map.setdefault(operation.resource, dict(operation.resource))
 
         if operation.action == "set_field":
             resource_state[operation.field] = deepcopy(operation.value)
@@ -449,7 +512,7 @@ def apply_operations_to_state(
             raise ReconciliationInputError("unsupported operation action: {0}".format(operation.action))
 
         existing_items = _normalize_set_items(resource_state.get(operation.field, []), field_policy, "state", operation.resource, operation.field)
-        by_identity = {identity: value for identity, value in existing_items}
+        by_identity = dict(existing_items)
         payload_identity = item_identity(operation.value, field_policy)
 
         if operation.action == "add_item":

@@ -147,6 +147,29 @@ non-Python template files being present in the AnsiballZ module payload.
 
 ## Resource Module Lifecycle
 
+Core resource modules use an evidence-gated planning pipeline. Optional values
+with `None` are omitted before reconciliation; explicit empty collections and
+`false`/`0` values retain their meaning. The pure reconciler produces semantic
+operations and a deterministic simulated state. A module renderer must
+acknowledge every operation with non-empty CLI commands before a sealed
+`ResourcePlan` reaches lifecycle code. Results and failure payloads are
+recursively redacted at the lifecycle boundary.
+
+```
+Ansible input
+  -> canonical normalizer
+  -> gather + current-state normalizer
+  -> semantic operations
+  -> evidence-admitted renderer acknowledgements
+  -> sealed ResourcePlan (commands, changed, simulated after)
+  -> check mode | load_config + optional re-gather
+  -> sanitized result
+```
+
+`replaced` synchronizes only explicitly listed resources and fields; it never
+implies global deletion. Unsupported reset, removal, unknown-field, ambiguous,
+or unproven command transitions fail before any device command is sent.
+
 Each resource module follows a consistent lifecycle:
 
 ```
@@ -160,26 +183,26 @@ Each resource module follows a consistent lifecycle:
 │         │                                                                     │
 │         ▼                                                                     │
 │  ┌─────────────┐                                                             │
-│  │ 2. Compute  │  Compare desired config with existing config                │
-│  │    Diff     │  Determine what needs to change                             │
+│  │ 2. Normalize│  Omit None; retain explicit empty/false/zero values         │
+│  │    + Diff   │  Compare canonical desired and current state                │
 │  └──────┬──────┘                                                             │
 │         │                                                                     │
 │         ▼                                                                     │
 │  ┌─────────────┐                                                             │
-│  │ 3. Generate │  Transform diff into CLI commands                           │
-│  │    Commands │  Use setval templates or programmatic generation            │
+│  │ 3. Seal Plan│  Render and acknowledge every semantic operation            │
+│  │             │  Reject unrendered or unadmitted transitions                │
 │  └──────┬──────┘                                                             │
 │         │                                                                     │
 │         ▼                                                                     │
 │  ┌─────────────┐                                                             │
-│  │ 4. Push     │  Send commands to device via cliconf                        │
+│  │ 4. Push     │  Send sealed commands to device via cliconf                 │
 │  │    Commands │  Execute via network_cli SSH session                        │
 │  └──────┬──────┘                                                             │
 │         │                                                                     │
 │         ▼                                                                     │
 │  ┌─────────────┐                                                             │
-│  │ 5. Verify   │  Re-gather facts (optional)                                 │
-│  │    State    │  Compare before/after state                                 │
+│  │ 5. Verify   │  Re-gather facts when supported; redact returned payloads   │
+│  │    State    │  Report the sealed simulated state in check mode             │
 │  └─────────────┘                                                             │
 │                                                                              │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -384,10 +407,10 @@ This allows modules to use logical names while the actual CLI commands are defin
 
 | Component | Requirement | Purpose |
 |-----------|-------------|---------|
-| **Ansible** | >= 2.15 | Core automation engine |
+| **ansible-core** | 2.20–2.21 | Supported controller core series |
 | **ansible.netcommon** | >= 5.0 | `network_cli`, terminal, and cliconf support |
 | **Netmiko** | optional | Reference for Raisecom-like CLI behavior only |
-| **Python** | >= 3.10 | Runtime dependency |
+| **Python** | 3.12–3.14 | Supported controller Python versions |
 
 ## Directory Structure
 

@@ -1,0 +1,10 @@
+{
+  "include": [
+    {"python": "3.12", "ansible_core": "2.20.*"},
+    {"python": "3.12", "ansible_core": "2.21.*"},
+    {"python": "3.13", "ansible_core": "2.20.*"},
+    {"python": "3.13", "ansible_core": "2.21.*"},
+    {"python": "3.14", "ansible_core": "2.20.*"},
+    {"python": "3.14", "ansible_core": "2.21.*"}
+  ]
+}

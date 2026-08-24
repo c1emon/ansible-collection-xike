@@ -1,14 +1,16 @@
-#!/usr/bin/python
 # -*- coding: utf-8 -*-
 
 """STP facts module for Xike OS."""
 
 from __future__ import absolute_import, division, print_function
+
 __metaclass__ = type
+# pylint: disable=unsupported-binary-operation
 
 from typing import Any
 
 import re
+
 
 def parse_stp_brief(output: str | None) -> dict[str, Any]:
     """
@@ -144,11 +146,13 @@ def parse_mstp_brief(output: str | None) -> dict[str, Any]:
             # Parse VLAN ranges (e.g., "1-100", "10,20,30", "1-50,100-200")
             vlans = parse_vlan_ranges(vlan_str)
 
-            instances.append({
-                "instance_id": instance_id,
-                "priority": priority,
-                "vlans": vlans,
-            })
+            instances.append(
+                {
+                    "instance_id": instance_id,
+                    "priority": priority,
+                    "vlans": vlans,
+                }
+            )
 
     if instances:
         facts["instances"] = instances
@@ -227,11 +231,13 @@ def parse_pvst_brief(output: str | None) -> dict[str, Any]:
             vlan_id = int(match.group(2))
             priority = int(match.group(3))
 
-            instances.append({
-                "instance_id": instance_id,
-                "vlan_id": vlan_id,
-                "priority": priority,
-            })
+            instances.append(
+                {
+                    "instance_id": instance_id,
+                    "vlan_id": vlan_id,
+                    "priority": priority,
+                }
+            )
 
     if instances:
         facts["instances"] = instances

@@ -1,10 +1,10 @@
-#!/usr/bin/python
 # -*- coding: utf-8 -*-
 
 """Internal TTP parser helpers for facts modules."""
 
 from __future__ import absolute_import, division, print_function
 __metaclass__ = type
+# pylint: disable=unsupported-binary-operation
 
 from typing import Any
 

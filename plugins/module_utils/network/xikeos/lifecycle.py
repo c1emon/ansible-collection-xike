@@ -1,19 +1,43 @@
 from __future__ import absolute_import, division, print_function
 
 __metaclass__ = type
+# pylint: disable=unsupported-binary-operation
 
 from typing import TYPE_CHECKING, Any, Callable, TypeVar
 
 if TYPE_CHECKING:
     from ansible.module_utils.basic import AnsibleModule
 
-from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config
-from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.errors import XikeOSError
-from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.reconcile import ReconciliationError
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.xikeos import (
+    load_config,
+)
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.errors import (
+    XikeOSError,
+)
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.reconcile import (
+    ReconciliationError,
+    ResourcePlan,
+)
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.safety import (
+    redact_value,
+)
 
 
-DEFAULT_MUTATING_STATES: tuple[str, ...] = ("merged", "replaced", "overridden", "deleted")
+DEFAULT_MUTATING_STATES: tuple[str, ...] = (
+    "merged",
+    "replaced",
+    "overridden",
+    "deleted",
+)
 T = TypeVar("T")
+
+
+def _exit(module: "AnsibleModule", **payload: Any) -> None:
+    module.exit_json(**redact_value(payload))
+
+
+def _fail(module: "AnsibleModule", **payload: Any) -> None:
+    module.fail_json(**redact_value(payload))
 
 
 def gather_with_error_boundary(
@@ -36,14 +60,15 @@ def gather_with_error_boundary(
             detail=getattr(exc, "detail", None),
             context=getattr(exc, "context", None) or context,
         )
-        module.fail_json(
+        _fail(
+            module,
             **payload,
         )
         return fallback
     except Exception as exc:
         fail_msg = "{0}: {1}".format(msg, exc) if include_exception_in_msg else msg
         payload.update(msg=fail_msg, error=str(exc), context=context)
-        module.fail_json(**payload)
+        _fail(module, **payload)
         return fallback
 
 
@@ -54,6 +79,7 @@ def run_resource_module_lifecycle(
     gather: Callable[["AnsibleModule"], Any],
     build_commands: Callable[[Any, str, Any], list[str]],
     build_after: Callable[[Any, Any, str], Any],
+    build_plan: Callable[[Any, str, Any], ResourcePlan] | None = None,
     mutating_states: tuple[str, ...] = DEFAULT_MUTATING_STATES,
     gathered_states: tuple[str, ...] = ("gathered",),
     rendered_states: tuple[str, ...] = ("rendered",),
@@ -84,6 +110,10 @@ def run_resource_module_lifecycle(
         build_after: Callback that computes the expected ``after`` state for
             mutating executions. It receives ``before``, ``config``, and
             ``state``.
+        build_plan: Optional sealed-plan callback. When supplied, it is the
+            sole source of operations, commands, changed status, and simulated
+            after-state; legacy ``build_commands``/``build_after`` callbacks
+            are retained only for modules not yet migrated.
         mutating_states: States that are allowed to apply configuration.
         gathered_states: Non-mutating states that return gathered facts.
         rendered_states: Non-mutating states that return rendered commands.
@@ -107,9 +137,14 @@ def run_resource_module_lifecycle(
 
     if state in rendered_states:
         try:
-            commands = build_commands(config, state, [] if rendered_current is None else rendered_current)
+            current = [] if rendered_current is None else rendered_current
+            if build_plan is not None:
+                commands = list(build_plan(config, state, current).commands)
+            else:
+                commands = build_commands(config, state, current)
         except ReconciliationError as exc:
-            module.fail_json(
+            _fail(
+                module,
                 msg="failed to plan resource commands",
                 changed=False,
                 commands=[],
@@ -117,12 +152,13 @@ def run_resource_module_lifecycle(
                 context="resource planning",
             )
             return
-        module.exit_json(changed=False, commands=commands, **{rendered_key: commands})
+        _exit(module, changed=False, commands=commands, **{rendered_key: commands})
 
     try:
         before = gather(module)
     except XikeOSError as exc:
-        module.fail_json(
+        _fail(
+            module,
             msg="failed to gather resource state",
             changed=False,
             commands=[],
@@ -137,20 +173,26 @@ def run_resource_module_lifecycle(
     result["before"] = before
 
     if state in gathered_states:
-        module.exit_json(changed=False, gathered=before)
+        _exit(module, changed=False, gathered=before)
 
     if state not in mutating_states:
-        module.fail_json(msg="unsupported resource module state: {0}".format(state))
+        _fail(module, msg="unsupported resource module state: {0}".format(state))
         return
 
     if not config:
         result["after"] = before
-        module.exit_json(**result)
+        _exit(module, **result)
 
     try:
-        commands = build_commands(config, state, before)
+        plan = build_plan(config, state, before) if build_plan is not None else None
+        commands = (
+            list(plan.commands)
+            if plan is not None
+            else build_commands(config, state, before)
+        )
     except ReconciliationError as exc:
-        module.fail_json(
+        _fail(
+            module,
             msg="failed to plan resource commands",
             changed=False,
             commands=[],
@@ -161,12 +203,15 @@ def run_resource_module_lifecycle(
         )
         return
     result["commands"] = commands
-    result["changed"] = bool(commands)
-    if commands:
+    result["changed"] = plan.changed if plan is not None else bool(commands)
+    if plan is not None:
+        result["after"] = plan.after
+    elif commands:
         try:
             result["after"] = build_after(before, config, state)
         except ReconciliationError as exc:
-            module.fail_json(
+            _fail(
+                module,
                 msg="failed to plan resource commands",
                 changed=False,
                 commands=commands,
@@ -180,13 +225,14 @@ def run_resource_module_lifecycle(
         result["after"] = before
 
     if module.check_mode:
-        module.exit_json(**result)
+        _exit(module, **result)
 
     if commands:
         try:
             apply_config(module, commands)
         except XikeOSError as exc:
-            module.fail_json(
+            _fail(
+                module,
                 msg="failed to apply resource commands",
                 changed=True,
                 commands=commands,
@@ -202,7 +248,8 @@ def run_resource_module_lifecycle(
             try:
                 result["after"] = gather(module)
             except XikeOSError as exc:
-                module.fail_json(
+                _fail(
+                    module,
                     msg="failed to verify final state after applying resource commands",
                     changed=True,
                     commands=commands,
@@ -215,7 +262,7 @@ def run_resource_module_lifecycle(
                 )
                 return
 
-    module.exit_json(**result)
+    _exit(module, **result)
 
 
 def exit_rendered_or_fail(
@@ -249,15 +296,16 @@ def exit_rendered_or_fail(
     """
     result: dict[str, Any] = {"changed": False, "commands": []}
     if not config:
-        module.exit_json(**result)
+        _exit(module, **result)
 
     if state == "rendered":
         commands = build_commands(config, render_state)
-        module.exit_json(changed=False, commands=commands, rendered=commands)
+        _exit(module, changed=False, commands=commands, rendered=commands)
 
-    module.fail_json(
+    _fail(
+        module,
         msg=(
             "{0} supports state=rendered only until lifecycle-safe gather, diff, "
             "and load_config apply support is implemented; state={1} is unsupported"
-        ).format(module_name, state)
+        ).format(module_name, state),
     )

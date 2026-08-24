@@ -1,9 +1,11 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
 """Xike OS LAG Interfaces resource module (eth-trunk)."""
 
 from __future__ import absolute_import, division, print_function
+
 __metaclass__ = type
 
 DOCUMENTATION = """
@@ -49,7 +51,7 @@ options:
     type: str
     default: merged
     choices: ['merged', 'replaced', 'gathered', 'rendered']
-author: clemon
+author: "clemon (@c1emon)"
 """
 
 EXAMPLES = """
@@ -119,17 +121,26 @@ rendered:
 """
 
 from ansible.module_utils.basic import AnsibleModule
-from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.lag_interfaces import LagInterfacesFacts
-from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import gather_with_error_boundary, run_resource_module_lifecycle
+from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.lag_interfaces import (
+    LagInterfacesFacts,
+)
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import (
+    gather_with_error_boundary,
+    run_resource_module_lifecycle,
+)
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.reconcile import (
     FieldPolicy,
     Operation,
     ReconciliationInputError,
+    ResourcePlan,
     ResourcePolicy,
     apply_operations_to_state,
     plan_operations,
+    seal_resource_plan,
 )
-from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.xikeos import (
+    load_config,
+)
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -142,19 +153,31 @@ LAG_POLICY = ResourcePolicy(
     identity=("name",),
     fields={
         "mode": FieldPolicy(kind="scalar", removal_supported=False),
-        "lacp_mode": FieldPolicy(kind="scalar", removal_supported=True),
+        "lacp_mode": FieldPolicy(kind="scalar", removal_supported=False),
         "members": FieldPolicy(kind="set", identity=()),
     },
 )
 
 
+def _normalize_lag_resource(config: LagInterfaceConfig) -> LagInterfaceConfig:
+    """Drop Ansible-inserted None without dropping false/empty values."""
+    normalized: LagInterfaceConfig = {"name": config["name"]}
+    for field_name in ("mode", "lacp_mode", "members"):
+        if config.get(field_name) is not None:
+            normalized[field_name] = config[field_name]
+    return normalized
+
+
 def _build_lag_state(config_list: list[LagInterfaceConfig]) -> LagInterfaceState:
     desired: LagInterfaceState = {}
     for config in config_list:
-        trunk_name = config["name"]
+        normalized = _normalize_lag_resource(config)
+        trunk_name = normalized["name"]
         if trunk_name in desired:
-            raise ReconciliationInputError("duplicate LAG interface config: {0}".format(trunk_name))
-        desired[trunk_name] = dict(config)
+            raise ReconciliationInputError(
+                "duplicate LAG interface config: {0}".format(trunk_name)
+            )
+        desired[trunk_name] = normalized
     return desired
 
 
@@ -162,6 +185,13 @@ def _ensure_lag_names(state: LagInterfaceState) -> LagInterfaceState:
     return {
         name: dict(config, name=config.get("name", name))
         for name, config in state.items()
+    }
+
+
+def _normalize_lag_state(state: LagInterfaceState) -> LagInterfaceState:
+    return {
+        name: _normalize_lag_resource(dict(config, name=config.get("name", name)))
+        for name, config in (state or {}).items()
     }
 
 
@@ -178,7 +208,9 @@ def _render_lag_operations(operations: list[Operation]) -> list[str]:
             commands.append("link-aggregation mode {0}".format(operation.value))
             continue
         if operation.field == "mode":
-            raise ReconciliationInputError("unsupported LAG operation: {0}".format(operation.action))
+            raise ReconciliationInputError(
+                "unsupported LAG operation: {0}".format(operation.action)
+            )
 
         if operation.field == "lacp_mode":
             if operation.action == "set_field":
@@ -186,7 +218,9 @@ def _render_lag_operations(operations: list[Operation]) -> list[str]:
             elif operation.action == "unset_field":
                 commands.append("no lacp mode")
             else:
-                raise ReconciliationInputError("unsupported LAG operation: {0}".format(operation.action))
+                raise ReconciliationInputError(
+                    "unsupported LAG operation: {0}".format(operation.action)
+                )
             continue
 
         if operation.field == "members":
@@ -194,14 +228,43 @@ def _render_lag_operations(operations: list[Operation]) -> list[str]:
             if operation.action == "add_item":
                 commands.append("link-aggregation members ethernet {0}".format(member))
             elif operation.action == "remove_item":
-                commands.append("no link-aggregation members ethernet {0}".format(member))
+                commands.append(
+                    "no link-aggregation members ethernet {0}".format(member)
+                )
             else:
-                raise ReconciliationInputError("unsupported LAG operation: {0}".format(operation.action))
+                raise ReconciliationInputError(
+                    "unsupported LAG operation: {0}".format(operation.action)
+                )
             continue
 
-        raise ReconciliationInputError("unsupported LAG field: {0}".format(operation.field))
+        raise ReconciliationInputError(
+            "unsupported LAG field: {0}".format(operation.field)
+        )
 
     return commands
+
+
+def _render_lag_operation(operation: Operation) -> list[str]:
+    """Render one acknowledged LAG operation for sealed planning."""
+    return _render_lag_operations([operation])
+
+
+def build_lifecycle_plan(
+    config_list: list[LagInterfaceConfig],
+    state: str,
+    existing_config: LagInterfaceState,
+) -> ResourcePlan:
+    """Build one complete LAG transition without recomputing the diff."""
+    before = _normalize_lag_state(existing_config)
+    desired = _build_lag_state(config_list)
+    operations = plan_operations(before, desired, state, LAG_POLICY)
+    plan = seal_resource_plan(
+        before, operations, LAG_POLICY, _render_lag_operation, state
+    )
+    return ResourcePlan(
+        plan.operations, plan.commands, _ensure_lag_names(plan.after), plan.changed
+    )
+
 
 def _extract_trunk_id(trunk_name: str) -> str:
     """Extract numeric ID from trunk name like 'eth-trunk 1' -> 1."""
@@ -226,7 +289,9 @@ def build_trunk_commands(
         list of CLI command strings (empty if no changes needed)
     """
     desired = _build_lag_state([config])
-    operations = plan_operations(existing_config, desired, 'replaced', LAG_POLICY)
+    operations = plan_operations(
+        _normalize_lag_state(existing_config), desired, "replaced", LAG_POLICY
+    )
     return _render_lag_operations(operations)
 
 
@@ -237,7 +302,9 @@ def build_lifecycle_commands(
 ) -> list[str]:
     """Build commands for all requested LAG interface configs."""
     desired = _build_lag_state(config_list)
-    operations = plan_operations(existing_config, desired, state, LAG_POLICY)
+    operations = plan_operations(
+        _normalize_lag_state(existing_config), desired, state, LAG_POLICY
+    )
     return _render_lag_operations(operations)
 
 
@@ -248,43 +315,52 @@ def build_after_state(
 ) -> LagInterfaceState:
     """Build the expected normalized LAG interface state after lifecycle execution."""
     desired_state = _build_lag_state(desired)
-    operations = plan_operations(before, desired_state, state, LAG_POLICY)
-    return _ensure_lag_names(apply_operations_to_state(before, operations, LAG_POLICY))
+    normalized_before = _normalize_lag_state(before)
+    operations = plan_operations(normalized_before, desired_state, state, LAG_POLICY)
+    return _ensure_lag_names(
+        apply_operations_to_state(normalized_before, operations, LAG_POLICY)
+    )
 
 
 def gather_lag_interfaces(module: "AnsibleModuleType") -> LagInterfaceState:
     """Gather LAG interface facts required for idempotent diffing."""
-    return gather_with_error_boundary(module, lambda: LagInterfacesFacts(module).get_facts(), 'failed to gather LAG interface facts', 'lag_interfaces', {})
+    return gather_with_error_boundary(
+        module,
+        lambda: LagInterfacesFacts(module).get_facts(),
+        "failed to gather LAG interface facts",
+        "lag_interfaces",
+        {},
+    )
 
 
 def main() -> None:
     module = AnsibleModule(
         argument_spec=dict(
             config=dict(
-                type='list',
-                elements='dict',
+                type="list",
+                elements="dict",
                 options=dict(
-                    name=dict(type='str', required=True),
-                    mode=dict(type='str', choices=['static', 'dynamic']),
+                    name=dict(type="str", required=True),
+                    mode=dict(type="str", choices=["static", "dynamic"]),
                     members=dict(
-                        type='list',
-                        elements='str',
+                        type="list",
+                        elements="str",
                         default=None,
                     ),
-                    lacp_mode=dict(type='str', choices=['active', 'passive']),
+                    lacp_mode=dict(type="str", choices=["active", "passive"]),
                 ),
             ),
             state=dict(
-                type='str',
-                default='merged',
-                choices=['merged', 'replaced', 'gathered', 'rendered'],
+                type="str",
+                default="merged",
+                choices=["merged", "replaced", "gathered", "rendered"],
             ),
         ),
         supports_check_mode=True,
     )
 
-    config_list = module.params.get('config', []) or []
-    state = module.params.get('state', 'merged')
+    config_list = module.params.get("config", []) or []
+    state = module.params.get("state", "merged")
 
     run_resource_module_lifecycle(
         module=module,
@@ -293,14 +369,15 @@ def main() -> None:
         gather=gather_lag_interfaces,
         build_commands=build_lifecycle_commands,
         build_after=build_after_state,
-        mutating_states=('merged', 'replaced'),
-        gathered_states=('gathered',),
-        rendered_states=('rendered',),
+        build_plan=build_lifecycle_plan,
+        mutating_states=("merged", "replaced"),
+        gathered_states=("gathered",),
+        rendered_states=("rendered",),
         rendered_current={},
         apply_config=load_config,
         gather_after_apply=True,
     )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

@@ -2,8 +2,8 @@
 
 [![Version](https://img.shields.io/badge/version-0.2.1-blue.svg)](https://github.com/c1emon/ansible-collection-xike)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
-[![Ansible](https://img.shields.io/badge/Ansible-%3E%3D2.15-red.svg)](https://www.ansible.com/)
-[![Python](https://img.shields.io/badge/Python-%3E%3D3.10-blue.svg)](https://www.python.org/)
+[![Ansible](https://img.shields.io/badge/ansible--core-2.20--2.21-red.svg)](https://www.ansible.com/)
+[![Python](https://img.shields.io/badge/Python-3.12--3.14-blue.svg)](https://www.python.org/)
 
 Ansible Collection for managing **Xike (兮克) switches** with Cisco IOS-like CLI.
 
@@ -74,12 +74,14 @@ The `c1emon.xikeos` collection provides Ansible modules for automating **Xike (�
 
 | Component | Requirement | Notes |
 |-----------|-------------|-------|
-| **Ansible** | >= 2.15 | Core automation engine |
+| **ansible-core** | 2.20–2.21 | Supported controller core series |
 | **ansible.netcommon** | >= 5.0 | Standard `network_cli`, terminal, and cliconf plugins |
 | **ttp** | >= 0.9.5 | Runtime parser for bundled facts templates |
 | **TextFSM** | >= 1.1.3 | Runtime parser for complex table facts templates |
 | **Netmiko** | optional | Reference only for Raisecom-like CLI behavior |
-| **Python** | >= 3.10 | Runtime dependency |
+| **Python** | 3.12–3.14 | Supported controller Python versions |
+
+The authoritative, machine-readable CI combinations are in [`.github/support-matrix.json`](.github/support-matrix.json).
 
 ### Dependencies
 
@@ -128,10 +130,8 @@ ansible-galaxy collection install /path/to/xike-xikeos/
 # Or symlink for development
 ln -s /path/to/xike-xikeos ~/.ansible/collections/ansible_collections/c1emon/xikeos
 
-# Or expose this checkout for live playbooks/tests
-mkdir -p .test_path/ansible_collections/c1emon
-ln -sfn "$PWD" .test_path/ansible_collections/c1emon/xikeos
-export ANSIBLE_COLLECTIONS_PATH=.test_path
+# Tests create an isolated temporary collection namespace automatically.
+# Do not create or reuse a persistent .test_path symlink.
 ```
 
 ### Development Setup
@@ -140,15 +140,11 @@ export ANSIBLE_COLLECTIONS_PATH=.test_path
 git clone https://github.com/c1emon/ansible-collection-xike.git
 cd ansible-collection-xike
 
-# Create virtual environment
-python3 -m venv venv
-source venv/bin/activate
-
-# Install project and development dependencies
+# Create the project-local virtual environment and install locked development dependencies
 uv sync --group dev
 
 # Run tests
-uv run pytest -q tests/unit
+.venv/bin/python -m pytest -q tests/unit
 ```
 
 ## Galaxy Release Publishing

@@ -1,2 +1,1 @@
-requires_ansible: ">=2.15.0"
-collections: [ansible.netcommon]
+requires_ansible: ">=2.20.0,<2.22.0"

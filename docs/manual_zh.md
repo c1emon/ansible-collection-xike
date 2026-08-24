@@ -2,7 +2,7 @@
 
 > 本文档由兮克三层交换机配置手册 PDF 自动转换生成。
 
-> 验证说明：自动转换内容存在标题、表格和代码块错位。当前实现只将下列人工复核过的命令作为 command/config/VLAN 参考：`show version`、`show running-config`、`show startup-config`、`show vlan`、`configure terminal`、`end`、`vlan <vlan-id>`、`description <name>`、`no vlan <vlan-id>`、`terminal length 0`、`terminal width 512`、`write memory`（保存命令仍需真机确认）。其他损坏章节不得直接作为实现依据。
+> 验证说明：自动转换内容存在标题、表格和代码块错位。`docs/三层配置手册.pdf` 是人工复核命令格式的原始来源，已准入的资源命令与限制见 `docs/command_evidence.md`。本 Markdown 仅作检索辅助；其损坏章节不得脱离原始 PDF 直接作为实现依据。
 
 ## 已验证实现参考：命令、配置与 VLAN
 
@@ -12279,7 +12279,7 @@ no igmp-snooping enable-vlan<vlan_list>
 
 | 参数 | 参数说明 | 取值 |
 |------|----------|------|
-| vlan-id | VLAN 列表 | [1-128]范围内使用“,”和“-”的任意组合 |
+| vlan-id | VLAN 列表 | [1-128]范围内使用","和"-"的任意组合 |
 
 例如：1,3,5-10
 ```
@@ -12393,7 +12393,7 @@ no igmp-snooping querier-vlan
 
 | 参数 | 参数说明 | 取值 |
 |------|----------|------|
-| vlan-id | VLAN 列表 | [1-128]范围内使用“,”和“-”的任意组合 |
+| vlan-id | VLAN 列表 | [1-128]范围内使用","和"-"的任意组合 |
 
 例如：1,3,5-10
 ```
@@ -13076,7 +13076,7 @@ ethernet <port id>]] }]
 | 参数 | 参数说明 | 取值 |
 |------|----------|------|
 | profile_list | Profile 索引号列 | 表 |
-| String<1-128>，[1,128]范围取值的任意组 | 合，使用“,”和“-”连接 | 例如：2,4,7-9 |
+| String<1-128>，[1,128]范围取值的任意组 | 合，使用","和"-"连接 | 例如：2,4,7-9 |
 | vid | VLAN 号 | [1-4094] |
 | port id | 端口号 | 端口号，格式device_id/slot_id/port_id |
 

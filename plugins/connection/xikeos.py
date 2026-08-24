@@ -1,10 +1,9 @@
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 from __future__ import absolute_import, division, print_function
 __metaclass__ = type
 
-from typing import Any
-
 DOCUMENTATION = """
-connection: xikeos
+name: xikeos
 short_description: Legacy Xike network_cli compatibility connection plugin
 version_added: "0.1.0"
 description:
@@ -48,6 +47,8 @@ RETURN = """
     type: str
     sample: c1emon.xikeos.xikeos
 """
+
+from typing import Any
 
 from ansible_collections.ansible.netcommon.plugins.connection.network_cli import Connection as NetworkCliConnection
 

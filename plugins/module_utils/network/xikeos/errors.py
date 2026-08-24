@@ -1,6 +1,7 @@
 from __future__ import absolute_import, division, print_function
 
 __metaclass__ = type
+# pylint: disable=unsupported-binary-operation
 
 from typing import Any, Sequence
 

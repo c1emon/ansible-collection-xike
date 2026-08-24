@@ -10,7 +10,7 @@ import pytest
 
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import run_resource_module_lifecycle
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos import errors as xikeos_errors
-from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.reconcile import ReconciliationInputError
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.reconcile import ReconciliationInputError, ResourcePlan
 
 from .lifecycle_helpers import ExitJson, fake_module
 
@@ -81,6 +81,41 @@ def test_resource_lifecycle_changed_and_check_mode_flow():
     assert module.exit_json.call_args.kwargs["changed"] is True
     assert module.exit_json.call_args.kwargs["commands"] == ["set one"]
     apply_config.assert_not_called()
+
+
+def test_resource_lifecycle_uses_sealed_plan_as_single_source_of_truth():
+    module = fake_module({"before": []}, check_mode=True)
+    build_commands = Mock(side_effect=AssertionError("sealed plan must own commands"))
+    build_after = Mock(side_effect=AssertionError("sealed plan must own after state"))
+    build_plan = Mock(
+        return_value=ResourcePlan(
+            operations=(),
+            commands=("set one",),
+            after=[{"name": "one"}],
+            changed=True,
+        )
+    )
+
+    with pytest.raises(ExitJson):
+        run_resource_module_lifecycle(
+            module,
+            [{"name": "one"}],
+            "merged",
+            _gather,
+            build_commands,
+            build_after,
+            build_plan=build_plan,
+        )
+
+    assert module.exit_json.call_args.kwargs == {
+        "changed": True,
+        "commands": ["set one"],
+        "before": [],
+        "after": [{"name": "one"}],
+    }
+    build_plan.assert_called_once_with([{"name": "one"}], "merged", [])
+    build_commands.assert_not_called()
+    build_after.assert_not_called()
 
 
 def test_resource_lifecycle_changed_flow_applies_and_can_regather_after():

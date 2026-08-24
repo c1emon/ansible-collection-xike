@@ -1,5 +1,6 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
 """Xike switch interfaces resource module."""
 
@@ -37,10 +38,6 @@ options:
       enabled:
         description: Admin state of the interface (false = shutdown)
         type: bool
-        default: true
-      mtu:
-        description: MTU size
-        type: int
   state:
     description:
       - Desired state.
@@ -51,7 +48,7 @@ options:
     type: str
     choices: ['merged', 'replaced', 'gathered', 'rendered']
     default: merged
-author: clemon
+author: "clemon (@c1emon)"
 """
 
 EXAMPLES = """
@@ -63,7 +60,6 @@ EXAMPLES = """
         speed: 1000
         duplex: full
         enabled: true
-        mtu: 1500
     state: merged
 
 - name: Replace all interface config
@@ -90,7 +86,6 @@ commands:
     - description Uplink to core
     - speed 1000
     - duplex full
-    - mtu 1500
     - no shutdown
 before:
   description: The configuration prior to the module execution.
@@ -114,6 +109,15 @@ from ansible.module_utils.basic import AnsibleModule
 from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.interfaces import InterfacesFacts
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import gather_with_error_boundary, run_resource_module_lifecycle
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.reconcile import (
+    FieldPolicy,
+    Operation,
+    ReconciliationInputError,
+    ResourcePlan,
+    ResourcePolicy,
+    plan_operations,
+    seal_resource_plan,
+)
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -125,6 +129,11 @@ InterfaceState = dict[str, InterfaceConfig]
 # Reuse constants from module_utils
 SPEED_OPTIONS = ['10', '100', '1000', '10000', 'auto']
 DUPLEX_OPTIONS = ['auto', 'full', 'half']
+INTERFACE_FIELDS = ('description', 'speed', 'duplex', 'enabled')
+INTERFACE_POLICY = ResourcePolicy(
+    identity=('name',),
+    fields={field: FieldPolicy(kind='scalar', removal_supported=False) for field in INTERFACE_FIELDS},
+)
 
 
 def build_interface_commands(cfg: InterfaceConfig) -> list[str]:
@@ -153,10 +162,8 @@ def build_interface_commands(cfg: InterfaceConfig) -> list[str]:
     if duplex is not None:
         commands.append('duplex {duplex}'.format(duplex=duplex))
 
-    # MTU
-    mtu = cfg.get('mtu')
-    if mtu is not None:
-        commands.append('mtu {mtu}'.format(mtu=mtu))
+    if cfg.get('mtu') is not None:
+        raise ReconciliationInputError('MTU configuration is not admitted by the command evidence register')
 
     # Enabled / shutdown
     enabled = cfg.get('enabled')
@@ -174,7 +181,55 @@ def _normalize_interface_config(cfg: InterfaceConfig) -> InterfaceConfig:
     normalized = dict(cfg)
     if 'shutdown' in normalized and 'enabled' not in normalized:
         normalized['enabled'] = not normalized.get('shutdown')
-    return normalized
+    if normalized.get('mtu') is not None:
+        raise ReconciliationInputError('MTU configuration is not admitted by the command evidence register')
+    return {
+        field: normalized[field]
+        for field in ('name',) + INTERFACE_FIELDS
+        if field in normalized and normalized[field] is not None
+    }
+
+
+def _normalize_interface_state(state: InterfaceState) -> InterfaceState:
+    return {
+        name: _normalize_interface_config({'name': name, **value})
+        for name, value in state.items()
+    }
+
+
+def _desired_interface_map(config_list: list[InterfaceConfig]) -> InterfaceState:
+    desired: InterfaceState = {}
+    for config in config_list:
+        normalized = _normalize_interface_config(config)
+        name = normalized['name']
+        if name in desired:
+            raise ReconciliationInputError('duplicate base interface config: {0}'.format(name))
+        desired[name] = normalized
+    return desired
+
+
+def _render_interface_operation(operation: Operation) -> list[str]:
+    name = dict(operation.resource)['name']
+    command_by_field = {
+        'description': 'no description' if operation.value == '' else 'description {0}'.format(operation.value),
+        'speed': 'speed {0}'.format(operation.value),
+        'duplex': 'duplex {0}'.format(operation.value),
+        'enabled': 'no shutdown' if operation.value else 'shutdown',
+    }
+    if operation.action != 'set_field' or operation.field not in command_by_field:
+        raise ReconciliationInputError('unsupported base-interface operation: {0}'.format(operation))
+    return ['interface {0}'.format(name), command_by_field[operation.field]]
+
+
+def build_lifecycle_plan(
+    config_list: list[InterfaceConfig],
+    state: str,
+    existing_config: InterfaceState,
+) -> ResourcePlan:
+    current = _normalize_interface_state(existing_config)
+    desired = _desired_interface_map(config_list)
+    operations = plan_operations(current, desired, state, INTERFACE_POLICY)
+    return seal_resource_plan(current, operations, INTERFACE_POLICY, _render_interface_operation, state)
 
 
 def build_commands(
@@ -183,17 +238,7 @@ def build_commands(
     existing_config: InterfaceState,
 ) -> list[str]:
     """Build minimal commands for desired base interface configs."""
-    commands: list[str] = []
-    for cfg in config_list:
-        desired = _normalize_interface_config(cfg)
-        existing = _normalize_interface_config(existing_config.get(desired['name'], {}))
-        changed_cfg = {'name': desired['name']}
-        for field in ('description', 'speed', 'duplex', 'enabled', 'mtu'):
-            if field in desired and desired.get(field) != existing.get(field):
-                changed_cfg[field] = desired.get(field)
-        if len(changed_cfg) > 1:
-            commands.extend(build_interface_commands(changed_cfg))
-    return commands
+    return list(build_lifecycle_plan(config_list, state, existing_config).commands)
 
 
 def build_after_state(
@@ -202,15 +247,7 @@ def build_after_state(
     state: str,
 ) -> InterfaceState:
     """Build the expected normalized interface state after lifecycle execution."""
-    after = {name: _normalize_interface_config(value) for name, value in before.items()}
-    if state == 'replaced':
-        after = {}
-    for cfg in desired:
-        normalized = _normalize_interface_config(cfg)
-        current = after.get(normalized['name'], {'name': normalized['name']})
-        current.update(normalized)
-        after[normalized['name']] = current
-    return after
+    return build_lifecycle_plan(desired, state, before).after
 
 
 def gather_interfaces(module: "AnsibleModuleType") -> InterfaceState:
@@ -229,8 +266,7 @@ def main() -> None:
                     description=dict(type='str', default=None),
                     speed=dict(type='str', choices=SPEED_OPTIONS, default=None),
                     duplex=dict(type='str', choices=DUPLEX_OPTIONS, default=None),
-                    enabled=dict(type='bool', default=True),
-                    mtu=dict(type='int', default=None),
+                    enabled=dict(type='bool', default=None),
                 ),
             ),
             state=dict(
@@ -251,6 +287,7 @@ def main() -> None:
         gather=gather_interfaces,
         build_commands=build_commands,
         build_after=build_after_state,
+        build_plan=build_lifecycle_plan,
         mutating_states=('merged', 'replaced'),
         gathered_states=('gathered',),
         rendered_states=('rendered',),

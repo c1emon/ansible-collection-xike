@@ -130,7 +130,7 @@ Current lifecycle classification:
 | `xikeos_lag_interfaces` | lifecycle-complete | Uses running-config facts and shared lifecycle helper. |
 | `xikeos_stp`, `xikeos_erps`, `xikeos_eaps`, `xikeos_qinq`, `xikeos_mirror`, `xikeos_port_isolate`, `xikeos_flex_monitor_link`, `xikeos_ospf_v2` | rendered-only | `state=rendered` returns commands without changing the device; mutating states fail fast until full lifecycle support is implemented. |
 
-Use `plugins/module_utils/network/xikeos/lifecycle.py` for shared lifecycle mechanics when adding or migrating modules.
+Use `plugins/module_utils/network/xikeos/lifecycle.py` for shared lifecycle mechanics when adding or migrating modules. Development environments are created only with `uv sync --group dev`; tests use a process-owned temporary collection namespace and must not rely on a persistent `.test_path` symlink.
 
 #### Module Utils (`plugins/module_utils/`)
 - **xikeos.py**: COMMAND_MAP and constants
