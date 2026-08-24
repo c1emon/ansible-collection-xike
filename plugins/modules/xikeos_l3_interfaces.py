@@ -137,7 +137,6 @@ from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.recon
     ReconciliationInputError,
     ResourcePlan,
     ResourcePolicy,
-    apply_operations_to_state,
     plan_operations,
     seal_resource_plan,
 )
@@ -271,23 +270,8 @@ def build_lifecycle_plan(
 def build_commands(
     config: L3InterfaceConfig, existing_config: L3InterfaceState
 ) -> list[str]:
-    """Build replaced-style CLI commands for a single interface config entry.
-
-    This preserves the legacy direct helper behavior. Lifecycle execution uses
-    build_lifecycle_commands() so the requested state controls reconciliation.
-
-    Args:
-        config: dict with 'name', 'ipv4', 'ipv6'
-        existing_config: dict of current interface configs keyed by name
-
-    Returns:
-        list: CLI commands to apply
-    """
-    desired = _build_l3_state([config])
-    operations = plan_operations(
-        _normalize_l3_state(existing_config), desired, "replaced", L3_POLICY
-    )
-    return _render_l3_operations(operations)
+    """Compatibility wrapper around the sealed one-resource plan."""
+    return list(build_lifecycle_plan([config], "replaced", existing_config).commands)
 
 
 def build_lifecycle_commands(
@@ -296,11 +280,7 @@ def build_lifecycle_commands(
     existing_config: L3InterfaceState,
 ) -> list[str]:
     """Build commands for all requested L3 interface configs."""
-    desired = _build_l3_state(config_list)
-    operations = plan_operations(
-        _normalize_l3_state(existing_config), desired, state, L3_POLICY
-    )
-    return _render_l3_operations(operations)
+    return list(build_lifecycle_plan(config_list, state, existing_config).commands)
 
 
 def build_after_state(
@@ -309,10 +289,7 @@ def build_after_state(
     state: str,
 ) -> L3InterfaceState:
     """Build the expected normalized L3 interface state after lifecycle execution."""
-    desired_state = _build_l3_state(desired)
-    before_state = _normalize_l3_state(before)
-    operations = plan_operations(before_state, desired_state, state, L3_POLICY)
-    return apply_operations_to_state(before_state, operations, L3_POLICY)
+    return build_lifecycle_plan(desired, state, before).after
 
 
 def gather_l3_interfaces(module: "AnsibleModuleType") -> L3InterfaceState:

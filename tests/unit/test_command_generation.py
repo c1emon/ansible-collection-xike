@@ -43,6 +43,7 @@ from ansible_collections.c1emon.xikeos.plugins.modules.xikeos_lag_interfaces imp
 )
 from ansible_collections.c1emon.xikeos.plugins.modules.xikeos_static_routes import (
     build_delete_commands as static_route_delete_commands,
+    build_lifecycle_plan as static_route_lifecycle_plan,
     build_lifecycle_commands as static_route_lifecycle_commands,
     route_key as static_route_key,
 )
@@ -329,6 +330,21 @@ class TestStaticRouteLifecycleRegressions:
             static_route_delete_commands([], existing)
         with pytest.raises(ReconciliationInputError, match="IPv6 static-route"):
             static_route_lifecycle_commands(ipv6, "merged", [])
+
+    def test_deleted_route_uses_one_sealed_plan_for_commands_and_after_state(self):
+        route = {
+            "destination": "192.0.2.0",
+            "mask": "255.255.255.0",
+            "next_hop": "10.0.0.1",
+            "distance": 1,
+            "route_type": "ipv4",
+        }
+
+        plan = static_route_lifecycle_plan([route], "deleted", [route])
+
+        assert plan.commands == ("no ip route 192.0.2.0 255.255.255.0 10.0.0.1",)
+        assert plan.changed is True
+        assert plan.after == []
 
 
 # ---------------------------------------------------------------------------

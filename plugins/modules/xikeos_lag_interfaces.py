@@ -134,7 +134,6 @@ from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.recon
     ReconciliationInputError,
     ResourcePlan,
     ResourcePolicy,
-    apply_operations_to_state,
     plan_operations,
     seal_resource_plan,
 )
@@ -276,23 +275,8 @@ def build_trunk_commands(
     config: LagInterfaceConfig,
     existing_config: LagInterfaceState,
 ) -> list[str]:
-    """Build replaced-style CLI commands for a single eth-trunk config entry.
-
-    This preserves the legacy direct helper behavior. Lifecycle execution uses
-    build_lifecycle_commands() so the requested state controls reconciliation.
-
-    Args:
-        config: dict with keys: name, mode, members, lacp_mode
-        existing_config: dict of current state keyed by trunk name
-
-    Returns:
-        list of CLI command strings (empty if no changes needed)
-    """
-    desired = _build_lag_state([config])
-    operations = plan_operations(
-        _normalize_lag_state(existing_config), desired, "replaced", LAG_POLICY
-    )
-    return _render_lag_operations(operations)
+    """Compatibility wrapper around the sealed one-resource plan."""
+    return list(build_lifecycle_plan([config], "replaced", existing_config).commands)
 
 
 def build_lifecycle_commands(
@@ -301,11 +285,7 @@ def build_lifecycle_commands(
     existing_config: LagInterfaceState,
 ) -> list[str]:
     """Build commands for all requested LAG interface configs."""
-    desired = _build_lag_state(config_list)
-    operations = plan_operations(
-        _normalize_lag_state(existing_config), desired, state, LAG_POLICY
-    )
-    return _render_lag_operations(operations)
+    return list(build_lifecycle_plan(config_list, state, existing_config).commands)
 
 
 def build_after_state(
@@ -314,12 +294,7 @@ def build_after_state(
     state: str,
 ) -> LagInterfaceState:
     """Build the expected normalized LAG interface state after lifecycle execution."""
-    desired_state = _build_lag_state(desired)
-    normalized_before = _normalize_lag_state(before)
-    operations = plan_operations(normalized_before, desired_state, state, LAG_POLICY)
-    return _ensure_lag_names(
-        apply_operations_to_state(normalized_before, operations, LAG_POLICY)
-    )
+    return build_lifecycle_plan(desired, state, before).after
 
 
 def gather_lag_interfaces(module: "AnsibleModuleType") -> LagInterfaceState:

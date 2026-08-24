@@ -162,7 +162,14 @@ from ansible.module_utils.basic import AnsibleModule
 from ansible_collections.c1emon.xikeos.plugins.module_utils.facts.static_routes import StaticRoutesFacts
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.xikeos import load_config
 from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.lifecycle import gather_with_error_boundary, run_resource_module_lifecycle
-from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.reconcile import ReconciliationInputError
+from ansible_collections.c1emon.xikeos.plugins.module_utils.network.xikeos.reconcile import (
+    FieldPolicy,
+    Operation,
+    ReconciliationInputError,
+    ResourcePlan,
+    ResourcePolicy,
+    seal_resource_plan,
+)
 from typing import Any
 
 RouteConfig = dict[str, Any]
@@ -171,6 +178,18 @@ RouteKey = tuple[Any, Any, Any, Any]
 # Valid distance range
 MIN_DISTANCE = 1
 MAX_DISTANCE = 255
+
+STATIC_ROUTE_POLICY = ResourcePolicy(
+    identity=('route_type', 'destination', 'mask', 'next_hop'),
+    fields={
+        # ``distance`` is the admitted IPv4 add form. A changed distance must
+        # fail closed because the available delete form cannot scope it.
+        'distance': FieldPolicy(kind='scalar', removal_supported=False),
+        # Used only by ``deleted`` planning so the sealed plan can model an
+        # exact resource deletion without global route removal semantics.
+        'present': FieldPolicy(kind='scalar', removal_supported=False),
+    },
+)
 
 
 def infer_route_type(route: RouteConfig) -> str:
@@ -366,19 +385,109 @@ def build_replaced_commands(
     return build_static_route_commands(config, existing_routes)
 
 
+def _route_operation_resource(key: RouteKey) -> tuple[tuple[str, Any], ...]:
+    return tuple(zip(STATIC_ROUTE_POLICY.identity, key))
+
+
+def _route_state_for_plan(routes: list[RouteConfig], label: str) -> dict[RouteKey, RouteConfig]:
+    """Return canonical planner state with an explicit resource-presence bit."""
+    return {
+        key: {**route, 'present': True}
+        for key, route in _normalized_route_map(routes, label).items()
+    }
+
+
+def _public_route_state(state: dict[Any, RouteConfig]) -> list[RouteConfig]:
+    """Remove internal planner fields and restore the module's list result."""
+    routes = []
+    for route in state.values():
+        if route.get('present', True):
+            public = dict(route)
+            public.pop('present', None)
+            routes.append(public)
+    return [routes_by_key for _key, routes_by_key in sorted((route_key(route), route) for route in routes)]
+
+
+def _render_static_route_operation(operation: Operation) -> list[str]:
+    """Render one exact admitted static-route transition."""
+    route = dict(operation.resource)
+    route_type = route['route_type']
+    if operation.field == 'distance':
+        if route_type != 'ipv4':
+            raise ReconciliationInputError(
+                'IPv6 static-route configuration is not admitted by the command evidence register'
+            )
+        command = 'ip route {0} {1} {2}'.format(
+            route['destination'], route['mask'], route['next_hop']
+        )
+        if operation.value != 1:
+            command += ' {0}'.format(operation.value)
+        return [command]
+    if operation.field == 'present' and operation.value is False:
+        command = _build_no_route_cmd(
+            route_type, route['destination'], route['mask'], route['next_hop']
+        )
+        if not command:
+            raise ReconciliationInputError('unsupported static-route type: {0}'.format(route_type))
+        return [command]
+    raise ReconciliationInputError('unsupported static-route operation: {0}'.format(operation))
+
+
+def build_lifecycle_plan(
+    config: list[RouteConfig], state: str, existing_routes: list[RouteConfig]
+) -> ResourcePlan:
+    """Build one sealed, minimal static-route transition.
+
+    ``replaced`` deliberately has listed-resource semantics: routes absent from
+    desired input are preserved. Distance replacements remain fail-closed until
+    the device command/gather evidence can identify a safe deletion scope.
+    """
+    current = _route_state_for_plan(existing_routes, 'current')
+    desired = _normalized_route_map(config, 'desired')
+    operations: list[Operation] = []
+
+    if state == 'deleted':
+        if not config:
+            raise ReconciliationInputError('empty static-route deletion is unsafe; specify exact routes')
+        _reject_unadmitted_ipv6(config, 'deletion')
+        for key in sorted(desired):
+            existing = current.get(key)
+            if existing is None:
+                continue
+            if existing.get('distance', 1) != desired[key].get('distance', 1):
+                raise ReconciliationInputError(
+                    'cannot safely delete static route with an ambiguous distance: {0}'.format(key)
+                )
+            operations.append(Operation('set_field', _route_operation_resource(key), 'present', False))
+    elif state in ('merged', 'replaced', 'rendered'):
+        _reject_unadmitted_ipv6(config, 'configuration')
+        for key in sorted(desired):
+            existing = current.get(key)
+            if existing is not None:
+                if existing.get('distance', 1) != desired[key].get('distance', 1):
+                    raise ReconciliationInputError(
+                        'cannot safely replace static-route distance without an exact delete form: {0}'.format(key)
+                    )
+                continue
+            operations.append(
+                Operation('set_field', _route_operation_resource(key), 'distance', desired[key].get('distance', 1))
+            )
+    else:
+        raise ReconciliationInputError('unsupported static-route lifecycle state: {0}'.format(state))
+
+    plan = seal_resource_plan(
+        current, operations, STATIC_ROUTE_POLICY, _render_static_route_operation, state
+    )
+    return ResourcePlan(plan.operations, plan.commands, _public_route_state(plan.after), plan.changed)
+
+
 def build_lifecycle_commands(
     config: list[RouteConfig],
     state: str,
     existing_routes: list[RouteConfig],
 ) -> list[str]:
     """Build commands for static route resource lifecycle states."""
-    if state == 'merged' or state == 'rendered':
-        return build_static_route_commands(config, existing_routes)
-    if state == 'replaced':
-        return build_replaced_commands(config, existing_routes)
-    if state == 'deleted':
-        return build_delete_commands(config, existing_routes)
-    return []
+    return list(build_lifecycle_plan(config, state, existing_routes).commands)
 
 
 def build_after_state(
@@ -387,20 +496,7 @@ def build_after_state(
     state: str,
 ) -> list[RouteConfig]:
     """Build a normalized simulated after-state for static route lifecycle results."""
-    after_by_key = _normalized_route_map(before, 'current')
-
-    if state in ('merged', 'replaced'):
-        for route in desired:
-            normalized = normalize_route(route)
-            after_by_key[route_key(normalized)] = normalized
-    elif state == 'deleted':
-        if desired:
-            for route in desired:
-                after_by_key.pop(route_key(route), None)
-        else:
-            raise ReconciliationInputError('empty static-route deletion is unsafe; specify exact routes')
-
-    return [after_by_key[key] for key in sorted(after_by_key)]
+    return list(build_lifecycle_plan(desired, state, before).after)
 
 
 def gather_static_routes(module: Any) -> list[RouteConfig]:
@@ -519,6 +615,7 @@ def main() -> None:
         rendered_current=[],
         apply_config=load_config,
         gather_after_apply=True,
+        build_plan=build_lifecycle_plan,
     )
 
 
